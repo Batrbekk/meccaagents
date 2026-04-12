@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "superpowers": {
+      "command": "node",
+      "args": [
+        "/Users/batyrbekkuandyk/Desktop/mecca-agent/superpower-mcp/superpowers-mcp.js"
+      ]
+    }
+  }
+}

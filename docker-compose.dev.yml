@@ -1,0 +1,40 @@
+services:
+  # Dev overrides: hot reload, exposed ports for debugging
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.dev
+    volumes:
+      - ./backend/src:/app/src:ro
+    ports:
+      - "3000:3000"
+      - "9229:9229"
+    environment:
+      - NODE_ENV=development
+      - CHOKIDAR_USEPOLLING=true
+    command: ["npx", "tsx", "watch", "--inspect=0.0.0.0:9229", "src/app.ts"]
+
+  agent-worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.dev
+    volumes:
+      - ./backend/src:/app/src:ro
+    environment:
+      - NODE_ENV=development
+      - CHOKIDAR_USEPOLLING=true
+    command: ["npx", "tsx", "watch", "src/workers/agent-runner.ts"]
+
+  # Expose DB and Redis ports for local tools
+  postgres:
+    ports:
+      - "5432:5432"
+
+  redis:
+    ports:
+      - "6379:6379"
+
+  minio:
+    ports:
+      - "9000:9000"
+      - "9001:9001"
