@@ -20,6 +20,9 @@ import approvalRoutes from './routes/approvals.js';
 import agentRoutes from './routes/agents.js';
 import integrationRoutes from './routes/integrations.js';
 import webhookRoutes from './routes/webhooks.js';
+import analyticsRoutes from './routes/analytics.js';
+import auditRoutes from './routes/audit.js';
+import toolLogsExportRoutes from './routes/tool-logs-export.js';
 
 const app = Fastify({
   logger,
@@ -84,6 +87,9 @@ await app.register(approvalRoutes, { prefix: '/approvals' });
 await app.register(agentRoutes, { prefix: '/agents' });
 await app.register(integrationRoutes, { prefix: '/integrations' });
 await app.register(webhookRoutes, { prefix: '/webhooks' });
+await app.register(analyticsRoutes, { prefix: '/analytics' });
+await app.register(auditRoutes, { prefix: '/audit-log' });
+await app.register(toolLogsExportRoutes, { prefix: '/tool-logs' });
 
 // --- Graceful shutdown ---
 const signals: NodeJS.Signals[] = ['SIGINT', 'SIGTERM'];
