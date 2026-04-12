@@ -18,6 +18,8 @@ import wsRoutes from './routes/ws.js';
 import fileRoutes from './routes/files.js';
 import approvalRoutes from './routes/approvals.js';
 import agentRoutes from './routes/agents.js';
+import integrationRoutes from './routes/integrations.js';
+import webhookRoutes from './routes/webhooks.js';
 
 const app = Fastify({
   logger,
@@ -80,8 +82,8 @@ await app.register(wsRoutes, { prefix: '/threads' });
 await app.register(fileRoutes, { prefix: '/files' });
 await app.register(approvalRoutes, { prefix: '/approvals' });
 await app.register(agentRoutes, { prefix: '/agents' });
-// await app.register(integrationRoutes, { prefix: '/integrations' });
-// await app.register(webhookRoutes, { prefix: '/webhooks' });
+await app.register(integrationRoutes, { prefix: '/integrations' });
+await app.register(webhookRoutes, { prefix: '/webhooks' });
 
 // --- Graceful shutdown ---
 const signals: NodeJS.Signals[] = ['SIGINT', 'SIGTERM'];
