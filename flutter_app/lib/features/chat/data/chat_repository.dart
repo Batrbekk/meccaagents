@@ -1,8 +1,43 @@
+import 'package:dio/dio.dart';
 import 'package:agentteam/core/api/dio_client.dart';
 import 'package:agentteam/features/chat/domain/message.dart';
 import 'package:agentteam/features/chat/domain/thread.dart';
 
 class ChatRepository {
+  /// Upload a file and return its metadata (id, url, mimeType, etc.)
+  Future<Map<String, dynamic>> uploadFile(
+    List<int> bytes,
+    String fileName,
+    String mimeType, {
+    String? threadId,
+  }) async {
+    final formData = FormData.fromMap({
+      'file': MultipartFile.fromBytes(bytes, filename: fileName),
+    });
+    final query = threadId != null ? '?threadId=$threadId' : '';
+    final response = await dio.post('/files/upload$query',
+        data: formData,
+        options: Options(headers: {'Content-Type': 'multipart/form-data'}));
+    return response.data as Map<String, dynamic>;
+  }
+
+  /// Send message with optional file attachments
+  Future<Message> sendMessageWithFiles(
+    String threadId,
+    String content, {
+    List<Map<String, dynamic>>? files,
+  }) async {
+    final metadata = <String, dynamic>{};
+    if (files != null && files.isNotEmpty) {
+      metadata['files'] = files;
+    }
+    final response = await dio.post('/threads/$threadId/messages', data: {
+      'content': content,
+      if (metadata.isNotEmpty) 'metadata': metadata,
+    });
+    return Message.fromJson(response.data as Map<String, dynamic>);
+  }
+
   Future<List<ChatThread>> getThreads() async {
     final response = await dio.get('/threads');
     final list = response.data as List<dynamic>;

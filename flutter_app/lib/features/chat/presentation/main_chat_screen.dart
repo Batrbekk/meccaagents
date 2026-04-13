@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:agentteam/core/theme/agent_colors.dart';
 import 'package:agentteam/features/auth/presentation/auth_provider.dart';
 import 'package:agentteam/features/chat/data/chat_repository.dart';
@@ -34,7 +35,9 @@ class _MainChatScreenState extends ConsumerState<MainChatScreen> {
   final _scrollController = ScrollController();
   final _focusNode = FocusNode();
   bool _isSending = false;
+  bool _isUploading = false;
   OverlayEntry? _mentionOverlay;
+  final List<_AttachedFile> _attachedFiles = [];
 
   @override
   void dispose() {
@@ -43,6 +46,80 @@ class _MainChatScreenState extends ConsumerState<MainChatScreen> {
     _focusNode.dispose();
     _mentionOverlay?.remove();
     super.dispose();
+  }
+
+  Future<void> _pickFiles() async {
+    final result = await FilePicker.pickFiles(
+      allowMultiple: true,
+      type: FileType.custom,
+      allowedExtensions: [
+        'pdf', 'txt', 'doc', 'docx', 'xls', 'xlsx', 'csv',
+        'jpg', 'jpeg', 'png', 'gif', 'webp',
+        'mp4', 'mov', 'avi',
+      ],
+      withData: true,
+    );
+
+    if (result == null || result.files.isEmpty) return;
+
+    setState(() => _isUploading = true);
+
+    final repo = ChatRepository();
+    final threadId = ref.read(mainThreadIdProvider).value;
+
+    for (final file in result.files) {
+      if (file.bytes == null) continue;
+      try {
+        final uploaded = await repo.uploadFile(
+          file.bytes!,
+          file.name,
+          _guessMimeType(file.name),
+          threadId: threadId,
+        );
+        setState(() {
+          _attachedFiles.add(_AttachedFile(
+            id: uploaded['id'] as String,
+            name: file.name,
+            mimeType: uploaded['mimeType'] as String? ?? _guessMimeType(file.name),
+            sizeBytes: file.size,
+          ));
+        });
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Failed to upload ${file.name}: $e'),
+                backgroundColor: Colors.red.shade700),
+          );
+        }
+      }
+    }
+
+    if (mounted) setState(() => _isUploading = false);
+  }
+
+  String _guessMimeType(String name) {
+    final ext = name.split('.').last.toLowerCase();
+    return switch (ext) {
+      'pdf' => 'application/pdf',
+      'txt' => 'text/plain',
+      'doc' => 'application/msword',
+      'docx' => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'xls' => 'application/vnd.ms-excel',
+      'xlsx' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'csv' => 'text/csv',
+      'jpg' || 'jpeg' => 'image/jpeg',
+      'png' => 'image/png',
+      'gif' => 'image/gif',
+      'webp' => 'image/webp',
+      'mp4' => 'video/mp4',
+      'mov' => 'video/quicktime',
+      'avi' => 'video/x-msvideo',
+      _ => 'application/octet-stream',
+    };
+  }
+
+  void _removeAttachment(int index) {
+    setState(() => _attachedFiles.removeAt(index));
   }
 
   void _showMentionPicker() {
@@ -99,13 +176,35 @@ class _MainChatScreenState extends ConsumerState<MainChatScreen> {
 
   Future<void> _sendMessage(String threadId) async {
     final text = _messageController.text.trim();
-    if (text.isEmpty || _isSending) return;
+    if (text.isEmpty && _attachedFiles.isEmpty) return;
+    if (_isSending) return;
 
     setState(() => _isSending = true);
     _messageController.clear();
 
     try {
-      await ref.read(messagesProvider(threadId).notifier).sendMessage(text);
+      // Build message content with file references
+      final fileRefs = _attachedFiles.map((f) => '[${f.name}]').join(' ');
+      final content = _attachedFiles.isNotEmpty
+          ? '$text ${fileRefs}'.trim()
+          : text;
+
+      final files = _attachedFiles
+          .map((f) => {
+                'id': f.id,
+                'name': f.name,
+                'mimeType': f.mimeType,
+                'sizeBytes': f.sizeBytes,
+              })
+          .toList();
+
+      final repo = ChatRepository();
+      await repo.sendMessageWithFiles(threadId, content, files: files.isNotEmpty ? files : null);
+
+      // Refresh messages
+      ref.invalidate(messagesProvider(threadId));
+
+      setState(() => _attachedFiles.clear());
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -181,8 +280,12 @@ class _MainChatScreenState extends ConsumerState<MainChatScreen> {
           scrollController: _scrollController,
           focusNode: _focusNode,
           isSending: _isSending,
+          isUploading: _isUploading,
+          attachedFiles: _attachedFiles,
           onSend: () => _sendMessage(threadId),
           onMention: _showMentionPicker,
+          onPickFiles: _pickFiles,
+          onRemoveAttachment: _removeAttachment,
         ),
       ),
     );
@@ -195,8 +298,12 @@ class _ChatBody extends ConsumerWidget {
   final ScrollController scrollController;
   final FocusNode focusNode;
   final bool isSending;
+  final bool isUploading;
+  final List<_AttachedFile> attachedFiles;
   final VoidCallback onSend;
   final VoidCallback onMention;
+  final VoidCallback onPickFiles;
+  final void Function(int) onRemoveAttachment;
 
   const _ChatBody({
     required this.threadId,
@@ -204,8 +311,12 @@ class _ChatBody extends ConsumerWidget {
     required this.scrollController,
     required this.focusNode,
     required this.isSending,
+    required this.isUploading,
+    required this.attachedFiles,
     required this.onSend,
     required this.onMention,
+    required this.onPickFiles,
+    required this.onRemoveAttachment,
   });
 
   @override
@@ -338,8 +449,73 @@ class _ChatBody extends ConsumerWidget {
           ),
           child: SafeArea(
             top: false,
-            child: Row(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
+                // Attached files preview
+                if (attachedFiles.isNotEmpty)
+                  Container(
+                    height: 60,
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: ListView.builder(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: attachedFiles.length,
+                      itemBuilder: (context, index) {
+                        final file = attachedFiles[index];
+                        return Container(
+                          margin: const EdgeInsets.only(right: 8),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: AgentColors.card,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                                color:
+                                    Colors.white.withValues(alpha: 0.1)),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(_fileIcon(file.mimeType),
+                                  size: 18, color: _fileColor(file.mimeType)),
+                              const SizedBox(width: 6),
+                              ConstrainedBox(
+                                constraints:
+                                    const BoxConstraints(maxWidth: 120),
+                                child: Text(
+                                  file.name,
+                                  style: const TextStyle(
+                                      color: Colors.white70, fontSize: 12),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                              InkWell(
+                                onTap: () => onRemoveAttachment(index),
+                                child: const Icon(Icons.close,
+                                    size: 14, color: Colors.white38),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                if (isUploading)
+                  const Padding(
+                    padding: EdgeInsets.only(bottom: 8),
+                    child: LinearProgressIndicator(
+                        color: AgentColors.lawyer,
+                        backgroundColor: AgentColors.card),
+                  ),
+                Row(
+              children: [
+                // Attach file button
+                IconButton(
+                  icon: const Icon(Icons.attach_file, color: Colors.white54),
+                  onPressed: isUploading ? null : onPickFiles,
+                  tooltip: 'Attach files (PDF, Excel, images, video)',
+                ),
                 // @ mention button
                 IconButton(
                   icon:
@@ -399,9 +575,44 @@ class _ChatBody extends ConsumerWidget {
                 ),
               ],
             ),
+              ],
+            ),
           ),
         ),
       ],
     );
   }
+
+  static IconData _fileIcon(String mimeType) {
+    if (mimeType.startsWith('image/')) return Icons.image;
+    if (mimeType.startsWith('video/')) return Icons.videocam;
+    if (mimeType.contains('pdf')) return Icons.picture_as_pdf;
+    if (mimeType.contains('spreadsheet') || mimeType.contains('excel') || mimeType.contains('csv')) {
+      return Icons.table_chart;
+    }
+    if (mimeType.contains('word') || mimeType.contains('document')) return Icons.description;
+    return Icons.insert_drive_file;
+  }
+
+  static Color _fileColor(String mimeType) {
+    if (mimeType.startsWith('image/')) return Colors.green;
+    if (mimeType.startsWith('video/')) return Colors.purple;
+    if (mimeType.contains('pdf')) return Colors.red;
+    if (mimeType.contains('spreadsheet') || mimeType.contains('excel')) return Colors.green.shade700;
+    return Colors.blue;
+  }
+}
+
+class _AttachedFile {
+  final String id;
+  final String name;
+  final String mimeType;
+  final int sizeBytes;
+
+  const _AttachedFile({
+    required this.id,
+    required this.name,
+    required this.mimeType,
+    required this.sizeBytes,
+  });
 }
