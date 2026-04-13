@@ -11,17 +11,28 @@ const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 
 // Allowed MIME types (validated by magic bytes in the multipart parser)
 const ALLOWED_MIME_TYPES = new Set([
+  // Images
   'image/jpeg',
   'image/png',
   'image/gif',
   'image/webp',
   'image/svg+xml',
+  // Documents
   'application/pdf',
   'application/msword',
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  // Spreadsheets
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'text/csv',
+  // Text
   'text/plain',
+  // Video
   'video/mp4',
   'video/quicktime',
+  'video/x-msvideo',
+  // Fallback for browser quirks
+  'application/octet-stream',
 ]);
 
 const FileIdParams = Type.Object({
