@@ -13,7 +13,7 @@ declare module 'fastify' {
 }
 
 export default fp(async (fastify: FastifyInstance) => {
-  fastify.decorateRequest('user', { getter: () => ({ id: '', role: '' }) });
+  fastify.decorateRequest('user', null);
 
   async function authenticate(request: FastifyRequest, _reply: FastifyReply): Promise<void> {
     const header = request.headers.authorization;

@@ -5,6 +5,14 @@
       "args": [
         "/Users/batyrbekkuandyk/Desktop/mecca-agent/superpower-mcp/superpowers-mcp.js"
       ]
+    },
+    "pencil": {
+      "command": "/Users/batyrbekkuandyk/.pencil/mcp/cursor/out/mcp-server-darwin-arm64",
+      "args": [
+        "--app",
+        "cursor"
+      ],
+      "env": {}
     }
   }
 }

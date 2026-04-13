@@ -4,7 +4,7 @@ import helmet from '@fastify/helmet';
 import rateLimit from '@fastify/rate-limit';
 import cookie from '@fastify/cookie';
 import multipart from '@fastify/multipart';
-import { logger } from './lib/logger.js';
+import { loggerConfig } from './lib/logger.js';
 import { errorHandler } from './lib/errors.js';
 import dbPlugin from './plugins/db.js';
 import redisPlugin from './plugins/redis.js';
@@ -25,7 +25,7 @@ import auditRoutes from './routes/audit.js';
 import toolLogsExportRoutes from './routes/tool-logs-export.js';
 
 const app = Fastify({
-  logger,
+  logger: loggerConfig,
   trustProxy: true,
 });
 
@@ -43,7 +43,7 @@ await app.register(cors, {
 });
 
 await app.register(rateLimit, {
-  max: 100,
+  max: 1000,
   timeWindow: '1 minute',
 });
 

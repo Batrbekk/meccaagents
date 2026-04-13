@@ -33,7 +33,7 @@ const sql = postgres(databaseUrl, { max: 10 });
 const db = drizzle(sql, { schema });
 
 // ── BullMQ Queue ─────────────────────────────────────────────────────
-const QUEUE_NAME = 'agent:run';
+const QUEUE_NAME = 'agent-run';
 
 export const agentQueue = new Queue<AgentJobData>(QUEUE_NAME, {
   connection,

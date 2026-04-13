@@ -46,6 +46,8 @@ dependencies:
   json_annotation: ^4.9.0
   image_picker: ^1.2.1
   file_picker: ^11.0.2
+  web: ^1.1.1
+  shared_preferences: ^2.5.5
 
 dev_dependencies:
   flutter_test:

@@ -43,8 +43,7 @@ function refreshCookieOptions(expires: Date) {
 // --- Plugin ---
 
 export default async function authRoutes(fastify: FastifyInstance) {
-  // Ensure auth plugin is loaded for the logout route
-  await fastify.register(import('../plugins/auth.js'));
+  // Auth plugin is registered globally in app.ts — no need to re-register here
 
   // =========================
   // POST /auth/register
