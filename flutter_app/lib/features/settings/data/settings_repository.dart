@@ -15,7 +15,7 @@ class SettingsRepository {
     final response = await dio.get('/agents');
     final data = response.data;
     final List<dynamic> items =
-        data is List ? data : (data['data'] as List? ?? []);
+        data is List ? data : (data['agents'] as List? ?? data['data'] as List? ?? []);
     return items
         .map((e) => AgentConfig.fromJson(e as Map<String, dynamic>))
         .toList();
