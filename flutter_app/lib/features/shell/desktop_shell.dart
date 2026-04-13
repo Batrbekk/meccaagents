@@ -50,7 +50,7 @@ class _MobileLayout extends StatelessWidget {
           NavigationDestination(
             icon: Icon(Icons.chat_bubble_outline),
             selectedIcon: Icon(Icons.chat_bubble),
-            label: 'Threads',
+            label: 'Chat',
           ),
           NavigationDestination(
             icon: Icon(Icons.approval_outlined),

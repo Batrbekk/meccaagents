@@ -3,8 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:agentteam/features/auth/presentation/auth_provider.dart';
 import 'package:agentteam/features/auth/presentation/login_screen.dart';
-import 'package:agentteam/features/chat/presentation/chat_screen.dart';
-import 'package:agentteam/features/chat/presentation/thread_list_screen.dart';
+import 'package:agentteam/features/chat/presentation/main_chat_screen.dart';
 import 'package:agentteam/features/approvals/presentation/approval_list_screen.dart';
 import 'package:agentteam/features/approvals/presentation/approval_detail_screen.dart';
 import 'package:agentteam/features/settings/settings_screen.dart';
@@ -33,7 +32,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       final isOnLogin = state.matchedLocation == '/login';
 
       if (!isLoggedIn && !isOnLogin) return '/login';
-      if (isLoggedIn && isOnLogin) return '/threads';
+      if (isLoggedIn && isOnLogin) return '/chat';
       return null;
     },
     routes: [
@@ -48,24 +47,13 @@ final routerProvider = Provider<GoRouter>((ref) {
           return DesktopShell(navigationShell: navigationShell);
         },
         branches: [
-          // --- Threads branch ---
+          // --- Chat branch (single unified chat) ---
           StatefulShellBranch(
             navigatorKey: _threadsNavigatorKey,
             routes: [
               GoRoute(
-                path: '/threads',
-                builder: (context, state) => const ThreadListScreen(),
-                routes: [
-                  GoRoute(
-                    path: ':id',
-                    parentNavigatorKey: _rootNavigatorKey,
-                    builder: (context, state) {
-                      final id = state.pathParameters['id']!;
-                      final title = state.uri.queryParameters['title'];
-                      return ChatScreen(threadId: id, threadTitle: title);
-                    },
-                  ),
-                ],
+                path: '/chat',
+                builder: (context, state) => const MainChatScreen(),
               ),
             ],
           ),
