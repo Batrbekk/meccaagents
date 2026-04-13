@@ -13,6 +13,8 @@ final dio = Dio(
 )..interceptors.add(_AuthInterceptor());
 
 class _AuthInterceptor extends Interceptor {
+  bool _isRefreshing = false;
+
   @override
   Future<void> onRequest(
     RequestOptions options,
@@ -30,22 +32,11 @@ class _AuthInterceptor extends Interceptor {
     DioException err,
     ErrorInterceptorHandler handler,
   ) async {
-    if (err.response?.statusCode == 401) {
-      try {
-        final refreshDio = Dio(
-          BaseOptions(baseUrl: _baseUrl),
-        );
-        final res = await refreshDio.post('/auth/refresh');
-        final newToken = res.data['accessToken'] as String;
-        await AuthStorage.saveAccessToken(newToken);
-
-        final retryOptions = err.requestOptions;
-        retryOptions.headers['Authorization'] = 'Bearer $newToken';
-        final retryResponse = await dio.fetch(retryOptions);
-        return handler.resolve(retryResponse);
-      } catch (_) {
-        await AuthStorage.clearAll();
-      }
+    if (err.response?.statusCode == 401 && !_isRefreshing) {
+      // Token expired — clear and let UI redirect to login
+      _isRefreshing = true;
+      await AuthStorage.clearAll();
+      _isRefreshing = false;
     }
     handler.next(err);
   }

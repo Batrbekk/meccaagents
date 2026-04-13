@@ -122,53 +122,73 @@ class _MainChatScreenState extends ConsumerState<MainChatScreen> {
     setState(() => _attachedFiles.removeAt(index));
   }
 
-  void _showMentionPicker() {
+  void _closeMentionPicker() {
     _mentionOverlay?.remove();
+    _mentionOverlay = null;
+  }
+
+  void _showMentionPicker() {
+    if (_mentionOverlay != null) {
+      _closeMentionPicker();
+      return;
+    }
     final overlay = Overlay.of(context);
     _mentionOverlay = OverlayEntry(
-      builder: (context) => Positioned(
-        bottom: 80,
-        left: 16,
-        right: 16,
-        child: Material(
-          color: AgentColors.card,
-          borderRadius: BorderRadius.circular(12),
-          elevation: 8,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: AgentColors.allAgents.map((agent) {
-              return ListTile(
-                leading: CircleAvatar(
-                  backgroundColor: agent.color,
-                  radius: 16,
-                  child: Icon(AgentColors.icon(agent.slug), size: 16, color: Colors.white),
-                ),
-                title: Text(agent.name,
-                    style: const TextStyle(color: Colors.white)),
-                subtitle: Text('@${agent.slug}',
-                    style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.5),
-                        fontSize: 12)),
-                onTap: () {
-                  final text = _messageController.text;
-                  final atIndex = text.lastIndexOf('@');
-                  if (atIndex >= 0) {
-                    _messageController.text =
-                        '${text.substring(0, atIndex)}@${agent.slug} ';
-                  } else {
-                    _messageController.text = '$text@${agent.slug} ';
-                  }
-                  _messageController.selection = TextSelection.fromPosition(
-                    TextPosition(offset: _messageController.text.length),
-                  );
-                  _mentionOverlay?.remove();
-                  _mentionOverlay = null;
-                  _focusNode.requestFocus();
-                },
-              );
-            }).toList(),
+      builder: (context) => Stack(
+        children: [
+          // Transparent barrier — tap to close
+          Positioned.fill(
+            child: GestureDetector(
+              onTap: _closeMentionPicker,
+              behavior: HitTestBehavior.opaque,
+              child: const ColoredBox(color: Colors.transparent),
+            ),
           ),
-        ),
+          // Agent picker
+          Positioned(
+            bottom: 80,
+            left: 16,
+            right: 16,
+            child: Material(
+              color: AgentColors.card,
+              borderRadius: BorderRadius.circular(12),
+              elevation: 8,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: AgentColors.allAgents.map((agent) {
+                  return ListTile(
+                    leading: CircleAvatar(
+                      backgroundColor: agent.color,
+                      radius: 16,
+                      child: Icon(AgentColors.icon(agent.slug), size: 16, color: Colors.white),
+                    ),
+                    title: Text(agent.name,
+                        style: const TextStyle(color: Colors.white)),
+                    subtitle: Text('@${agent.slug}',
+                        style: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.5),
+                            fontSize: 12)),
+                    onTap: () {
+                      final text = _messageController.text;
+                      final atIndex = text.lastIndexOf('@');
+                      if (atIndex >= 0) {
+                        _messageController.text =
+                            '${text.substring(0, atIndex)}@${agent.slug} ';
+                      } else {
+                        _messageController.text = '$text@${agent.slug} ';
+                      }
+                      _messageController.selection = TextSelection.fromPosition(
+                        TextPosition(offset: _messageController.text.length),
+                      );
+                      _closeMentionPicker();
+                      _focusNode.requestFocus();
+                    },
+                  );
+                }).toList(),
+              ),
+            ),
+          ),
+        ],
       ),
     );
     overlay.insert(_mentionOverlay!);
