@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:agentteam/core/websocket/ws_client.dart';
 import 'package:agentteam/features/chat/data/chat_repository.dart';
 import 'package:agentteam/features/chat/domain/message.dart';
 import 'package:agentteam/features/chat/domain/thread.dart';
@@ -86,23 +85,19 @@ class MessagesNotifier extends AsyncNotifier<MessagesState> {
   MessagesNotifier(this._threadId);
 
   final String _threadId;
-  WsClient? _wsClient;
-  StreamSubscription<Map<String, dynamic>>? _wsSub;
+  Timer? _pollTimer;
 
   @override
   FutureOr<MessagesState> build() async {
     ref.onDispose(() {
-      _wsSub?.cancel();
-      _wsClient?.dispose();
+      _pollTimer?.cancel();
     });
 
     final repo = ref.read(chatRepositoryProvider);
     final result = await repo.getMessages(_threadId);
 
-    // Connect WebSocket for real-time updates
-    _wsClient = WsClient();
-    await _wsClient!.connect(_threadId);
-    _wsSub = _wsClient!.messages.listen(_onWsMessage);
+    // Poll for new messages every 3 seconds
+    _pollTimer = Timer.periodic(const Duration(seconds: 3), (_) => _poll());
 
     return MessagesState(
       messages: result.messages,
@@ -110,26 +105,33 @@ class MessagesNotifier extends AsyncNotifier<MessagesState> {
     );
   }
 
-  void _onWsMessage(Map<String, dynamic> data) {
-    final type = data['type'] as String?;
+  Future<void> _poll() async {
     final current = state.value;
     if (current == null) return;
 
-    if (type == 'message') {
-      final payload = data['payload'] as Map<String, dynamic>?;
-      if (payload == null) return;
-      final message = Message.fromJson(payload);
-      final exists = current.messages.any((m) => m.id == message.id);
-      if (!exists) {
+    try {
+      final repo = ref.read(chatRepositoryProvider);
+      final result = await repo.getMessages(_threadId);
+
+      // Check for new messages
+      final newMessages = result.messages;
+      if (newMessages.isEmpty && current.messages.isEmpty) return;
+
+      // Detect if there are new messages (compare first message id)
+      final hasNew = newMessages.isNotEmpty &&
+          (current.messages.isEmpty || newMessages.first.id != current.messages.first.id);
+
+      if (hasNew) {
+        // If newest message is from agent, stop typing indicator
+        final newestIsAgent = newMessages.isNotEmpty && newMessages.first.senderType == 'agent';
         state = AsyncData(current.copyWith(
-          messages: [message, ...current.messages],
-          agentTyping: false,
+          messages: newMessages,
+          nextCursor: result.nextCursor,
+          agentTyping: newestIsAgent ? false : current.agentTyping,
         ));
       }
-    } else if (type == 'typing') {
-      state = AsyncData(current.copyWith(agentTyping: true));
-    } else if (type == 'typing_stop') {
-      state = AsyncData(current.copyWith(agentTyping: false));
+    } catch (_) {
+      // Silently ignore poll errors
     }
   }
 
@@ -173,9 +175,10 @@ class MessagesNotifier extends AsyncNotifier<MessagesState> {
         state = AsyncData(updated.copyWith(
           messages: [message, ...updated.messages],
           isSending: false,
+          agentTyping: true, // Show "thinking..." until agent responds
         ));
       } else {
-        state = AsyncData(updated.copyWith(isSending: false));
+        state = AsyncData(updated.copyWith(isSending: false, agentTyping: true));
       }
     } catch (e) {
       final updated = state.value ?? current;
