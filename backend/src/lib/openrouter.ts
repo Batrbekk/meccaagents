@@ -480,7 +480,12 @@ export class OpenRouterClient {
 }
 
 // ---------------------------------------------------------------------------
-// Singleton
+// Singleton — reads API key from process.env.OPENROUTER_API_KEY
+// Key is set in env when user saves integration via Settings UI
 // ---------------------------------------------------------------------------
+
+export function getOpenRouter(): OpenRouterClient {
+  return new OpenRouterClient();
+}
 
 export const openrouter = new OpenRouterClient();

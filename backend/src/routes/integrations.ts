@@ -86,6 +86,16 @@ export default async function integrationRoutes(fastify: FastifyInstance) {
         throw new ValidationError(`Unsupported service: ${service}`);
       }
 
+      // Set in process.env so OpenRouter client picks it up immediately
+      const creds = credentials as Record<string, string>;
+      if (service === 'openrouter' && creds.apiKey) {
+        process.env.OPENROUTER_API_KEY = creds.apiKey;
+      } else if (service === 'notion' && creds.integrationToken) {
+        process.env.NOTION_TOKEN = creds.integrationToken;
+      } else if (service === 'whatsapp' && creds.apiKey) {
+        process.env.WHATSAPP_API_KEY = creds.apiKey;
+      }
+
       // Encrypt credentials
       const encrypted = encrypt(JSON.stringify(credentials));
 

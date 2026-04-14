@@ -1,5 +1,5 @@
 import { BaseAgent } from './base-agent.js';
-import { openrouter } from '../lib/openrouter.js';
+import { getOpenRouter } from '../lib/openrouter.js';
 import { publish } from '../lib/pubsub.js';
 import { approvalTasks } from '../db/schema.js';
 import { logger } from '../lib/logger.js';
@@ -157,7 +157,7 @@ export class ContentAgent extends BaseAgent {
 
     const config = await this.getConfig(context.db);
 
-    const response = await openrouter.chat({
+    const response = await getOpenRouter().chat({
       model: config.model,
       temperature: config.temperature,
       messages: [
@@ -224,7 +224,7 @@ export class ContentAgent extends BaseAgent {
       ? ` The content should be approximately ${durationSeconds} seconds long.`
       : '';
 
-    const response = await openrouter.chat({
+    const response = await getOpenRouter().chat({
       model: config.model,
       temperature: config.temperature,
       messages: [
@@ -262,7 +262,7 @@ export class ContentAgent extends BaseAgent {
       'Generating image via OpenRouter',
     );
 
-    const result = await openrouter.generateImage({
+    const result = await getOpenRouter().generateImage({
       model: 'black-forest-labs/flux-1.1-pro',
       prompt,
       imageConfig: { aspectRatio },
@@ -322,7 +322,7 @@ export class ContentAgent extends BaseAgent {
       'Generating video via OpenRouter',
     );
 
-    const result = await openrouter.generateVideoAndWait(
+    const result = await getOpenRouter().generateVideoAndWait(
       {
         model: 'google/veo-2.5-flash',
         prompt,

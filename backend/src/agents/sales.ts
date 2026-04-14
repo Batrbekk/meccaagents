@@ -1,5 +1,5 @@
 import { BaseAgent } from './base-agent.js';
-import { openrouter } from '../lib/openrouter.js';
+import { getOpenRouter } from '../lib/openrouter.js';
 import { publish } from '../lib/pubsub.js';
 import { approvalTasks } from '../db/schema.js';
 import { logger } from '../lib/logger.js';
@@ -249,7 +249,7 @@ export class SalesAgent extends BaseAgent {
       ? `\n\nAdditional context about the client/deal: ${additionalContext}`
       : '';
 
-    const response = await openrouter.chat({
+    const response = await getOpenRouter().chat({
       model: config.model,
       temperature: config.temperature,
       messages: [

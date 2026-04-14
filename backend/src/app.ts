@@ -63,6 +63,24 @@ await app.register(minioPlugin);
 await app.register(wsPlugin);
 await app.register(authPlugin);
 
+// --- Load integration keys from DB into env on startup ---
+try {
+  const { decrypt } = await import('./lib/crypto.js');
+  const rows = await app.sql`SELECT service, credentials FROM integrations WHERE is_active = true`;
+  for (const row of rows) {
+    try {
+      const creds = JSON.parse(decrypt(row.credentials));
+      if (row.service === 'openrouter' && creds.apiKey) {
+        process.env.OPENROUTER_API_KEY = creds.apiKey;
+        app.log.info('Loaded OpenRouter API key from DB');
+      }
+      if (row.service === 'notion' && creds.integrationToken) {
+        process.env.NOTION_TOKEN = creds.integrationToken;
+      }
+    } catch { /* skip invalid */ }
+  }
+} catch { /* DB not ready yet, skip */ }
+
 // --- Health checks ---
 app.get('/health', async () => ({ status: 'ok' }));
 

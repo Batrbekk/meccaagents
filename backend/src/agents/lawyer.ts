@@ -1,5 +1,5 @@
 import { BaseAgent } from './base-agent.js';
-import { openrouter } from '../lib/openrouter.js';
+import { getOpenRouter } from '../lib/openrouter.js';
 import { publish } from '../lib/pubsub.js';
 import { approvalTasks } from '../db/schema.js';
 import { searchDocuments, createRawSql } from '../lib/rag.js';
@@ -213,7 +213,7 @@ export class LawyerAgent extends BaseAgent {
 
     const config = await this.getConfig(context.db);
 
-    const response = await openrouter.chat({
+    const response = await getOpenRouter().chat({
       model: config.model,
       temperature: 0.3, // Lower temperature for analytical tasks
       messages: [
@@ -268,7 +268,7 @@ Respond in the same language as the input text.`,
     const config = await this.getConfig(context.db);
 
     // Use the LLM to generate the detailed document body based on terms
-    const response = await openrouter.chat({
+    const response = await getOpenRouter().chat({
       model: config.model,
       temperature: 0.4,
       messages: [
@@ -359,7 +359,7 @@ Rules:
 
     logger.info({ query, threadId: context.threadId }, 'Lawyer agent: web search');
 
-    const response = await openrouter.chat({
+    const response = await getOpenRouter().chat({
       model: config.model,
       temperature: 0.3,
       messages: [

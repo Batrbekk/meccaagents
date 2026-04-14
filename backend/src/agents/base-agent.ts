@@ -1,6 +1,6 @@
 import { eq } from 'drizzle-orm';
 import { agentConfigs, toolLogs } from '../db/schema.js';
-import { openrouter, type ChatMessage } from '../lib/openrouter.js';
+import { getOpenRouter, type ChatMessage } from '../lib/openrouter.js';
 import { logger } from '../lib/logger.js';
 import type { DrizzleDB, ToolDefinition, ToolContext, AgentResponse } from './types.js';
 
@@ -58,7 +58,8 @@ export abstract class BaseAgent {
     let totalUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
 
     for (let iteration = 0; iteration < MAX_TOOL_ITERATIONS; iteration++) {
-      const response = await openrouter.chat({
+      const client = getOpenRouter();
+      const response = await client.chat({
         model: config.model,
         temperature: config.temperature,
         messages: conversationMessages,
