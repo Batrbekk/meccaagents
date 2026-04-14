@@ -20,8 +20,10 @@ class IntegrationInfo {
           json['display_name'] as String? ??
           json['service'] as String,
       isConnected: json['isConnected'] as bool? ??
+          json['connected'] as bool? ??
           json['is_connected'] as bool? ??
-          json['status'] == 'connected',
+          json['isActive'] as bool? ??
+          false,
       requiredFields: (json['requiredFields'] as List<dynamic>?)
               ?.map((e) => e.toString())
               .toList() ??

@@ -72,6 +72,10 @@ class ChatRepository {
     return (messages: messages, nextCursor: nextCursor);
   }
 
+  Future<void> deleteMessage(String threadId, String messageId) async {
+    await dio.delete('/threads/$threadId/messages/$messageId');
+  }
+
   Future<Message> sendMessage(String threadId, String content) async {
     final response = await dio.post(
       '/threads/$threadId/messages',

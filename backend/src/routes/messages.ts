@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { Type, type Static } from '@sinclair/typebox';
 import { eq, and, lt, desc } from 'drizzle-orm';
 import { messages, threads } from '../db/schema.js';
-import { NotFoundError } from '../lib/errors.js';
+import { NotFoundError, ForbiddenError } from '../lib/errors.js';
 import { publish } from '../lib/pubsub.js';
 import { enqueueAgentJob } from '../workers/agent-runner.js';
 
@@ -150,6 +150,42 @@ export default async function messageRoutes(fastify: FastifyInstance) {
       });
 
       return reply.status(201).send(message);
+    },
+  );
+
+  // ----- DELETE /threads/:threadId/messages/:messageId -----
+  fastify.delete<{ Params: { id: string; messageId: string } }>(
+    '/:id/messages/:messageId',
+    {
+      preHandler: [fastify.authenticate],
+      schema: {
+        params: Type.Object({
+          id: Type.String({ format: 'uuid' }),
+          messageId: Type.String({ format: 'uuid' }),
+        }),
+      },
+    },
+    async (request, reply) => {
+      const db = fastify.db;
+      const { messageId } = request.params;
+
+      // Find message
+      const [message] = await db
+        .select()
+        .from(messages)
+        .where(eq(messages.id, messageId))
+        .limit(1);
+
+      if (!message) throw new NotFoundError('Message');
+
+      // Only the sender can delete their own messages
+      if (message.senderType !== 'user' || message.senderId !== request.user.id) {
+        throw new ForbiddenError('You can only delete your own messages');
+      }
+
+      await db.delete(messages).where(eq(messages.id, messageId));
+
+      return reply.status(200).send({ success: true });
     },
   );
 }

@@ -447,6 +447,22 @@ class _ChatBody extends ConsumerWidget {
                       child: MessageBubble(
                         message: message,
                         isUser: message.senderType == 'user',
+                        onDelete: message.senderType == 'user'
+                            ? (msg) async {
+                                final repo = ChatRepository();
+                                try {
+                                  await repo.deleteMessage(threadId, msg.id);
+                                  ref.invalidate(messagesProvider(threadId));
+                                } catch (e) {
+                                  if (context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(content: Text('Failed to delete: $e'),
+                                          backgroundColor: Colors.red.shade700),
+                                    );
+                                  }
+                                }
+                              }
+                            : null,
                       ),
                     );
                   },
