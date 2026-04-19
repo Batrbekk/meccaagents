@@ -1,6 +1,6 @@
 import { eq } from 'drizzle-orm';
 import { agentConfigs, toolLogs } from '../db/schema.js';
-import { getOpenRouter, type ChatMessage } from '../lib/openrouter.js';
+import { getOpenRouter, type ChatMessage, type ContentPart } from '../lib/openrouter.js';
 import { logger } from '../lib/logger.js';
 import type { DrizzleDB, ToolDefinition, ToolContext, AgentResponse } from './types.js';
 
@@ -37,18 +37,19 @@ export abstract class BaseAgent {
     db: DrizzleDB;
     threadId: string;
     userMessage: string;
-    context: Array<{ role: string; content: string }>;
+    context: Array<{
+      role: string;
+      content: string;
+      fileUrls?: Array<{ url: string; mimeType: string; name: string }>;
+    }>;
   }): Promise<AgentResponse> {
     const { db, threadId, userMessage, context } = params;
     const config = await this.getConfig(db);
 
-    // Build the conversation messages array
+    // Build the conversation messages array with multimodal support
     const conversationMessages: ChatMessage[] = [
       { role: 'system', content: config.systemPrompt },
-      ...context.map((m) => ({
-        role: m.role as ChatMessage['role'],
-        content: m.content,
-      })),
+      ...context.map((m) => buildChatMessage(m)),
       { role: 'user' as const, content: userMessage },
     ];
 
@@ -120,25 +121,16 @@ export abstract class BaseAgent {
 
         allToolCalls.push({ name: toolName, args: toolArgs, result });
 
-        // Append the assistant's tool-call message and the tool result to
-        // the conversation so OpenRouter can continue reasoning.
+        // Add tool call + result as plain text messages to avoid
+        // format translation issues between OpenAI ↔ Anthropic via OpenRouter
         conversationMessages.push({
           role: 'assistant',
-          content: JSON.stringify({
-            tool_calls: [
-              {
-                id: toolCall.id,
-                type: 'function',
-                function: { name: toolName, arguments: toolCall.function.arguments },
-              },
-            ],
-          }),
+          content: `[Calling tool: ${toolName}(${JSON.stringify(toolArgs)})]`,
         });
 
         conversationMessages.push({
-          role: 'tool',
-          content: JSON.stringify(result),
-          tool_call_id: toolCall.id,
+          role: 'user',
+          content: `[Tool "${toolName}" result]: ${JSON.stringify(result).slice(0, 2000)}`,
         });
       }
     }
@@ -166,4 +158,43 @@ export abstract class BaseAgent {
     args: Record<string, unknown>,
     context: ToolContext,
   ): Promise<unknown>;
+}
+
+// ---------------------------------------------------------------------------
+// Helper: build a ChatMessage with multimodal content when files are present
+// ---------------------------------------------------------------------------
+
+function buildChatMessage(m: {
+  role: string;
+  content: string;
+  fileUrls?: Array<{ url: string; mimeType: string; name: string }>;
+}): ChatMessage {
+  const files = m.fileUrls ?? [];
+  const imageFiles = files.filter((f) => f.mimeType.startsWith('image/'));
+  const otherFiles = files.filter((f) => !f.mimeType.startsWith('image/'));
+
+  // No files at all → plain text message
+  if (files.length === 0) {
+    return { role: m.role as ChatMessage['role'], content: m.content };
+  }
+
+  // Build multimodal content parts
+  const parts: ContentPart[] = [];
+
+  // Text part (include non-image file descriptions)
+  let textContent = m.content;
+  if (otherFiles.length > 0) {
+    const fileList = otherFiles
+      .map((f) => `- ${f.name} (${f.mimeType})`)
+      .join('\n');
+    textContent += `\n\nAttached documents:\n${fileList}`;
+  }
+  parts.push({ type: 'text', text: textContent });
+
+  // Image parts (base64 data URLs)
+  for (const img of imageFiles) {
+    parts.push({ type: 'image_url', image_url: { url: img.url } });
+  }
+
+  return { role: m.role as ChatMessage['role'], content: parts };
 }

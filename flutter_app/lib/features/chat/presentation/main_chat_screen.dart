@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:agentteam/core/theme/app_theme.dart';
 import 'package:agentteam/core/theme/agent_colors.dart';
-import 'package:agentteam/features/auth/presentation/auth_provider.dart';
 import 'package:agentteam/features/chat/data/chat_repository.dart';
 import 'package:agentteam/features/chat/presentation/chat_providers.dart';
 import 'package:agentteam/features/chat/presentation/widgets/agent_typing_indicator.dart';
@@ -149,24 +150,53 @@ class _MainChatScreenState extends ConsumerState<MainChatScreen> {
             bottom: 80,
             left: 16,
             right: 16,
-            child: Material(
-              color: AgentColors.card,
-              borderRadius: BorderRadius.circular(12),
-              elevation: 8,
-              child: Column(
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFFE5E7EB)),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.12),
+                    blurRadius: 16,
+                    offset: const Offset(0, -4),
+                  ),
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.06),
+                    blurRadius: 4,
+                    offset: const Offset(0, -1),
+                  ),
+                ],
+              ),
+              child: Material(
+                color: Colors.transparent,
+                borderRadius: BorderRadius.circular(12),
+                clipBehavior: Clip.antiAlias,
+                child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: AgentColors.allAgents.map((agent) {
                   return ListTile(
                     leading: CircleAvatar(
                       backgroundColor: agent.color,
                       radius: 16,
-                      child: Icon(AgentColors.icon(agent.slug), size: 16, color: Colors.white),
+                      child: Text(
+                        agent.name[0].toUpperCase(),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                     ),
                     title: Text(agent.name,
-                        style: const TextStyle(color: Colors.white)),
+                        style: GoogleFonts.inter(
+                          color: AppTheme.foregroundPrimary,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                        )),
                     subtitle: Text('@${agent.slug}',
-                        style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.5),
+                        style: GoogleFonts.inter(
+                            color: AgentColors.placeholder,
                             fontSize: 12)),
                     onTap: () {
                       final text = _messageController.text;
@@ -185,6 +215,7 @@ class _MainChatScreenState extends ConsumerState<MainChatScreen> {
                     },
                   );
                 }).toList(),
+              ),
               ),
             ),
           ),
@@ -218,11 +249,10 @@ class _MainChatScreenState extends ConsumerState<MainChatScreen> {
               })
           .toList();
 
-      final repo = ChatRepository();
-      await repo.sendMessageWithFiles(threadId, content, files: files.isNotEmpty ? files : null);
-
-      // Refresh messages
-      ref.invalidate(messagesProvider(threadId));
+      await ref.read(messagesProvider(threadId).notifier).sendMessageWithFiles(
+        content,
+        files: files.isNotEmpty ? files : null,
+      );
 
       setState(() => _attachedFiles.clear());
     } catch (e) {
@@ -245,67 +275,41 @@ class _MainChatScreenState extends ConsumerState<MainChatScreen> {
 
     return Scaffold(
       backgroundColor: AgentColors.background,
-      appBar: AppBar(
-        backgroundColor: AgentColors.surface,
-        title: const Text('AgentTeam',
-            style: TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 1)),
-        actions: [
-          // Agent status indicators
-          ...AgentColors.allAgents.map((agent) => Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 2),
-                child: Tooltip(
-                  message: agent.name,
-                  child: CircleAvatar(
-                    backgroundColor: agent.color,
-                    radius: 10,
-                    child: Icon(AgentColors.icon(agent.slug), size: 11, color: Colors.white),
-                  ),
+      body: SafeArea(
+        child: threadAsync.when(
+          loading: () => const Center(
+            child: CircularProgressIndicator(color: AppTheme.accentPrimary),
+          ),
+          error: (err, _) => Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('Failed to load chat',
+                    style: GoogleFonts.inter(
+                      color: AppTheme.foregroundSecondary,
+                    )),
+                const SizedBox(height: 12),
+                ElevatedButton(
+                  onPressed: () => ref.invalidate(mainThreadIdProvider),
+                  child: const Text('Retry'),
                 ),
-              )),
-          const SizedBox(width: 8),
-          IconButton(
-            icon: const Icon(Icons.logout, color: Colors.white54),
-            tooltip: 'Sign out',
-            onPressed: () async {
-              await ref.read(authStateProvider.notifier).logout();
-            },
+              ],
+            ),
           ),
-        ],
-      ),
-      body: threadAsync.when(
-        loading: () => const Center(
-          child: CircularProgressIndicator(color: AgentColors.lawyer),
-        ),
-        error: (err, _) => Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text('Failed to load chat',
-                  style:
-                      TextStyle(color: Colors.white.withValues(alpha: 0.7))),
-              const SizedBox(height: 12),
-              ElevatedButton(
-                onPressed: () => ref.invalidate(mainThreadIdProvider),
-                child: const Text('Retry'),
-              ),
-            ],
+          data: (threadId) => _ChatBody(
+            threadId: threadId,
+            messageController: _messageController,
+            scrollController: _scrollController,
+            focusNode: _focusNode,
+            isSending: _isSending,
+            isUploading: _isUploading,
+            attachedFiles: _attachedFiles,
+            onSend: () => _sendMessage(threadId),
+            onMention: _showMentionPicker,
+            onMentionClose: _closeMentionPicker,
+            onPickFiles: _pickFiles,
+            onRemoveAttachment: _removeAttachment,
           ),
-        ),
-        data: (threadId) => _ChatBody(
-          threadId: threadId,
-          messageController: _messageController,
-          scrollController: _scrollController,
-          focusNode: _focusNode,
-          isSending: _isSending,
-          isUploading: _isUploading,
-          attachedFiles: _attachedFiles,
-          onSend: () => _sendMessage(threadId),
-          onMention: _showMentionPicker,
-          onPickFiles: _pickFiles,
-          onRemoveAttachment: _removeAttachment,
         ),
       ),
     );
@@ -322,6 +326,7 @@ class _ChatBody extends ConsumerWidget {
   final List<_AttachedFile> attachedFiles;
   final VoidCallback onSend;
   final VoidCallback onMention;
+  final VoidCallback onMentionClose;
   final VoidCallback onPickFiles;
   final void Function(int) onRemoveAttachment;
 
@@ -335,6 +340,7 @@ class _ChatBody extends ConsumerWidget {
     required this.attachedFiles,
     required this.onSend,
     required this.onMention,
+    required this.onMentionClose,
     required this.onPickFiles,
     required this.onRemoveAttachment,
   });
@@ -343,70 +349,104 @@ class _ChatBody extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final messagesAsync = ref.watch(messagesProvider(threadId));
 
+    final screenW = MediaQuery.of(context).size.width;
+    final hPad = screenW > 400 ? 16.0 : 8.0;
+
     return Column(
       children: [
-        // Agent bar
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          color: AgentColors.surface,
-          child: Row(
+        // ---- Header area ----
+        Padding(
+          padding: EdgeInsets.fromLTRB(hPad, 12, hPad, 8),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Agents online: ',
-                  style:
-                      TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 12)),
-              ...AgentColors.allAgents.map((a) => Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: Chip(
-                      avatar: CircleAvatar(
-                          backgroundColor: a.color,
-                          radius: 8,
-                          child: Icon(AgentColors.icon(a.slug), size: 9, color: Colors.white)),
-                      label: Text(a.name,
-                          style: const TextStyle(
-                              color: Colors.white70, fontSize: 11)),
-                      backgroundColor: AgentColors.card,
-                      side: BorderSide.none,
-                      visualDensity: VisualDensity.compact,
-                      padding: EdgeInsets.zero,
-                    ),
-                  )),
+              // Title "Chat" — Anton 28px
+              Text(
+                'Chat',
+                style: GoogleFonts.anton(
+                  fontSize: 28,
+                  color: AppTheme.foregroundPrimary,
+                ),
+              ),
+              const SizedBox(height: 10),
+              // Agent chips row
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: AgentColors.allAgents.map((a) {
+                    return Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: AgentColors.card,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              width: 8,
+                              height: 8,
+                              decoration: BoxDecoration(
+                                color: a.color,
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              a.name,
+                              style: GoogleFonts.inter(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w500,
+                                color: AppTheme.foregroundPrimary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ),
             ],
           ),
         ),
 
-        // Messages
+        // ---- Messages ----
         Expanded(
           child: messagesAsync.when(
             loading: () => const Center(
-              child: CircularProgressIndicator(color: AgentColors.lawyer),
+              child: CircularProgressIndicator(color: AppTheme.accentPrimary),
             ),
             error: (err, _) => Center(
               child: Text('Error: $err',
-                  style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.7))),
+                  style: GoogleFonts.inter(
+                    color: AppTheme.foregroundSecondary,
+                  )),
             ),
             data: (state) {
-              if (state.messages.isEmpty) {
+              if (state.messages.isEmpty && !state.agentTyping) {
                 return Center(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(Icons.chat_bubble_outline,
                           size: 64,
-                          color: Colors.white.withValues(alpha: 0.2)),
+                          color: AppTheme.foregroundTertiary.withValues(alpha: 0.4)),
                       const SizedBox(height: 16),
                       Text(
                         'Start a conversation with your AI team',
-                        style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.5),
+                        style: GoogleFonts.inter(
+                            color: AppTheme.foregroundSecondary,
                             fontSize: 16),
                       ),
                       const SizedBox(height: 8),
                       Text(
                         'Use @agent to mention a specific agent\ne.g. @content create a content plan',
                         textAlign: TextAlign.center,
-                        style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.3),
+                        style: GoogleFonts.inter(
+                            color: AppTheme.foregroundTertiary,
                             fontSize: 13),
                       ),
                     ],
@@ -429,21 +469,21 @@ class _ChatBody extends ConsumerWidget {
                   controller: scrollController,
                   reverse: true,
                   padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      EdgeInsets.symmetric(horizontal: hPad, vertical: 8),
                   itemCount: state.messages.length +
                       (state.agentTyping ? 1 : 0),
                   itemBuilder: (context, index) {
                     if (state.agentTyping && index == 0) {
-                      return const Padding(
-                        padding: EdgeInsets.only(bottom: 8),
-                        child: AgentTypingIndicator(),
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: AgentTypingIndicator(agentSlug: state.typingAgentSlug),
                       );
                     }
                     final msgIndex =
                         state.agentTyping ? index - 1 : index;
                     final message = state.messages[msgIndex];
                     return Padding(
-                      padding: const EdgeInsets.only(bottom: 6),
+                      padding: const EdgeInsets.only(bottom: 12),
                       child: MessageBubble(
                         message: message,
                         isUser: message.senderType == 'user',
@@ -472,15 +512,12 @@ class _ChatBody extends ConsumerWidget {
           ),
         ),
 
-        // Input bar
+        // ---- Input bar ----
         Container(
-          padding:
-              const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          decoration: BoxDecoration(
-            color: AgentColors.surface,
+          padding: EdgeInsets.symmetric(horizontal: hPad, vertical: 8),
+          decoration: const BoxDecoration(
             border: Border(
-              top: BorderSide(
-                  color: Colors.white.withValues(alpha: 0.1)),
+              top: BorderSide(color: Color(0xFFE5E7EB), width: 1),
             ),
           ),
           child: SafeArea(
@@ -505,9 +542,7 @@ class _ChatBody extends ConsumerWidget {
                           decoration: BoxDecoration(
                             color: AgentColors.card,
                             borderRadius: BorderRadius.circular(12),
-                            border: Border.all(
-                                color:
-                                    Colors.white.withValues(alpha: 0.1)),
+                            border: Border.all(color: AgentColors.borderColor),
                           ),
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
@@ -520,16 +555,17 @@ class _ChatBody extends ConsumerWidget {
                                     const BoxConstraints(maxWidth: 120),
                                 child: Text(
                                   file.name,
-                                  style: const TextStyle(
-                                      color: Colors.white70, fontSize: 12),
+                                  style: GoogleFonts.inter(
+                                      color: AppTheme.foregroundSecondary,
+                                      fontSize: 12),
                                   overflow: TextOverflow.ellipsis,
                                 ),
                               ),
                               const SizedBox(width: 4),
                               InkWell(
                                 onTap: () => onRemoveAttachment(index),
-                                child: const Icon(Icons.close,
-                                    size: 14, color: Colors.white38),
+                                child: Icon(Icons.close,
+                                    size: 14, color: AppTheme.foregroundTertiary),
                               ),
                             ],
                           ),
@@ -538,79 +574,101 @@ class _ChatBody extends ConsumerWidget {
                     ),
                   ),
                 if (isUploading)
-                  const Padding(
-                    padding: EdgeInsets.only(bottom: 8),
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
                     child: LinearProgressIndicator(
-                        color: AgentColors.lawyer,
+                        color: AppTheme.accentPrimary,
                         backgroundColor: AgentColors.card),
                   ),
                 Row(
-              children: [
-                // Attach file button
-                IconButton(
-                  icon: const Icon(Icons.attach_file, color: Colors.white54),
-                  onPressed: isUploading ? null : onPickFiles,
-                  tooltip: 'Attach files (PDF, Excel, images, video)',
-                ),
-                // @ mention button
-                IconButton(
-                  icon:
-                      const Icon(Icons.alternate_email, color: Colors.white54),
-                  onPressed: onMention,
-                  tooltip: 'Mention agent',
-                ),
-                // Text field
-                Expanded(
-                  child: TextField(
-                    controller: messageController,
-                    focusNode: focusNode,
-                    style: const TextStyle(color: Colors.white),
-                    maxLines: 4,
-                    minLines: 1,
-                    decoration: InputDecoration(
-                      hintText: 'Message your AI team...',
-                      hintStyle:
-                          TextStyle(color: Colors.white.withValues(alpha: 0.3)),
-                      filled: true,
-                      fillColor: AgentColors.card,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(24),
-                        borderSide: BorderSide.none,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    // Paperclip icon
+                    GestureDetector(
+                      onTap: isUploading ? null : onPickFiles,
+                      child: Icon(
+                        Icons.attach_file,
+                        size: 22,
+                        color: AppTheme.foregroundSecondary,
                       ),
-                      contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 10),
                     ),
-                    onChanged: (text) {
-                      if (text.endsWith('@')) {
-                        onMention();
-                      }
-                    },
-                    onSubmitted: (_) => onSend(),
-                  ),
+                    const SizedBox(width: 8),
+                    // Input field — pill shape
+                    Expanded(
+                      child: TextField(
+                        controller: messageController,
+                        focusNode: focusNode,
+                        style: GoogleFonts.inter(
+                          color: AppTheme.foregroundPrimary,
+                          fontSize: 14,
+                        ),
+                        maxLines: 1,
+                        minLines: 1,
+                        decoration: InputDecoration(
+                          hintText: 'Message agents...',
+                          hintStyle: GoogleFonts.inter(
+                            color: const Color(0xFF9CA3AF),
+                            fontSize: 14,
+                          ),
+                          filled: true,
+                          fillColor: const Color(0xFFF3F4F6),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(20),
+                            borderSide: BorderSide.none,
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(20),
+                            borderSide: BorderSide.none,
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(20),
+                            borderSide: BorderSide.none,
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 10),
+                        ),
+                          onChanged: (text) {
+                            if (text.endsWith('@')) {
+                              onMention();
+                            } else if (!text.contains('@')) {
+                              // Close mention picker when @ is deleted
+                              onMentionClose();
+                            }
+                          },
+                          onSubmitted: (_) => onSend(),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    // Send button — accent circle 36x36
+                    GestureDetector(
+                      onTap: isSending ? null : onSend,
+                      child: Container(
+                        width: 36,
+                        height: 36,
+                        decoration: const BoxDecoration(
+                          color: AppTheme.accentPrimary,
+                          shape: BoxShape.circle,
+                        ),
+                        child: Center(
+                          child: isSending
+                              ? const SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Colors.white,
+                                  ),
+                                )
+                              : const Icon(
+                                  Icons.arrow_upward,
+                                  color: Colors.white,
+                                  size: 18,
+                                ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 8),
-                // Send button
-                Container(
-                  decoration: const BoxDecoration(
-                    color: AgentColors.lawyer,
-                    shape: BoxShape.circle,
-                  ),
-                  child: IconButton(
-                    icon: isSending
-                        ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Colors.white,
-                            ),
-                          )
-                        : const Icon(Icons.send, color: Colors.white),
-                    onPressed: isSending ? null : onSend,
-                  ),
-                ),
-              ],
-            ),
               ],
             ),
           ),

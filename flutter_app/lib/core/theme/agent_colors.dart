@@ -1,16 +1,27 @@
 import 'package:flutter/material.dart';
+import 'app_theme.dart';
 
 class AgentColors {
-  static const Color orchestrator = Color(0xFF9E9E9E);
-  static const Color lawyer = Color(0xFF2196F3);
-  static const Color content = Color(0xFF009688);
-  static const Color smm = Color(0xFFFF7043);
-  static const Color sales = Color(0xFFFFC107);
+  // Agent identity colours — from Pencil Dev design tokens
+  static const Color orchestrator = Color(0xFF7B61FF); // purple
+  static const Color lawyer = Color(0xFF3B82F6);       // blue
+  static const Color content = Color(0xFFF97316);      // orange
+  static const Color smm = Color(0xFFEC4899);          // pink
+  static const Color sales = Color(0xFF10B981);        // green
 
-  static const Color background = Color(0xFF0D1117);
-  static const Color surface = Color(0xFF161B22);
-  static const Color card = Color(0xFF1C2333);
-  static const Color userBubble = Color(0xFF2979FF);
+  // Surface colours delegate to the central theme tokens.
+  static Color get background => AppTheme.surfacePrimary; // white
+  static Color get surface => AppTheme.surfacePrimary;
+  static Color get card => const Color(0xFFF3F4F6); // #F3F4F6 (chip / agent bubble bg)
+
+  // User message bubble — foreground-primary (dark)
+  static const Color userBubble = AppTheme.foregroundPrimary;
+
+  // Semantic helpers
+  static const Color inputBg = Color(0xFFF3F4F6);
+  static const Color borderColor = Color(0xFFE5E7EB);
+  static const Color placeholder = Color(0xFF9CA3AF);
+  static const Color accentPrimary = AppTheme.accentPrimary;
 
   static Color forAgent(String slug) => forSlug(slug);
 
@@ -65,6 +76,7 @@ class AgentColors {
     }
   }
 
+  /// Tinted background for agent badges / chips on light surfaces.
   static Color backgroundForSlug(String slug) =>
       forSlug(slug).withValues(alpha: 0.12);
 

@@ -263,7 +263,7 @@ export class ContentAgent extends BaseAgent {
     );
 
     const result = await getOpenRouter().generateImage({
-      model: 'black-forest-labs/flux-1.1-pro',
+      model: 'google/gemini-3-pro-image-preview',
       prompt,
       imageConfig: { aspectRatio },
     });
@@ -302,11 +302,14 @@ export class ContentAgent extends BaseAgent {
       'Image approval task created',
     );
 
+    // Return WITHOUT the full image data URL to avoid bloating the conversation context
+    // The image is saved in the approval task payload
     return {
-      imageUrl,
+      imageGenerated: true,
       approvalId: task!.id,
       status: 'pending_approval',
       model: result.model,
+      prompt,
     };
   }
 
@@ -324,7 +327,7 @@ export class ContentAgent extends BaseAgent {
 
     const result = await getOpenRouter().generateVideoAndWait(
       {
-        model: 'google/veo-2.5-flash',
+        model: 'google/veo-3.1',
         prompt,
         duration,
         generateAudio: true,

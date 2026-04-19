@@ -13,9 +13,6 @@ import { enqueueAgentJob } from '../workers/agent-runner.js';
 import { logger } from '../lib/logger.js';
 
 // ── Raw body capture ────────────────────────────────────────────────────
-// Fastify parses JSON by default; webhook signature verification needs the
-// original raw body string.  We store it on the request via a preParsing hook.
-
 declare module 'fastify' {
   interface FastifyRequest {
     rawBody?: string;
@@ -24,7 +21,9 @@ declare module 'fastify' {
 
 // ── Credential helpers ──────────────────────────────────────────────────
 
-interface WhatsAppCredentials {
+interface WhatsAppAccount {
+  id: string;
+  label: string | null;
   apiKey: string;
 }
 
@@ -34,29 +33,46 @@ interface InstagramCredentials {
 }
 
 /**
- * Try loading credentials from the `integrations` table first (encrypted).
- * Fall back to environment variables.
+ * Load ALL active WhatsApp accounts from the DB.
  */
-async function getWhatsAppCredentials(
+async function getAllWhatsAppAccounts(
   fastify: FastifyInstance,
-): Promise<WhatsAppCredentials> {
-  try {
-    const [row] = await fastify.db
-      .select({ credentials: integrations.credentials })
-      .from(integrations)
-      .where(eq(integrations.service, 'whatsapp'))
-      .limit(1);
+): Promise<WhatsAppAccount[]> {
+  const accounts: WhatsAppAccount[] = [];
 
-    if (row) {
-      const parsed = JSON.parse(decrypt(row.credentials)) as WhatsAppCredentials;
-      if (parsed.apiKey) return parsed;
+  try {
+    const rows = await fastify.db
+      .select({
+        id: integrations.id,
+        label: integrations.label,
+        credentials: integrations.credentials,
+      })
+      .from(integrations)
+      .where(eq(integrations.service, 'whatsapp'));
+
+    for (const row of rows) {
+      try {
+        const parsed = JSON.parse(decrypt(row.credentials)) as { apiKey?: string };
+        if (parsed.apiKey) {
+          accounts.push({
+            id: row.id,
+            label: row.label,
+            apiKey: parsed.apiKey,
+          });
+        }
+      } catch { /* skip invalid */ }
     }
-  } catch {
-    // fall through to env vars
+  } catch { /* DB error */ }
+
+  // Fallback to env
+  if (accounts.length === 0) {
+    const envKey = process.env.WHATSAPP_API_KEY;
+    if (envKey) {
+      accounts.push({ id: 'env', label: 'Default', apiKey: envKey });
+    }
   }
 
-  const apiKey = process.env.WHATSAPP_API_KEY ?? '';
-  return { apiKey };
+  return accounts;
 }
 
 async function getInstagramCredentials(
@@ -92,7 +108,6 @@ async function findOrCreateThread(
 ): Promise<string> {
   const title = `${channel}: ${externalId}`;
 
-  // Look for an existing thread with this exact title
   const [existing] = await fastify.db
     .select({ id: threads.id })
     .from(threads)
@@ -112,8 +127,7 @@ async function findOrCreateThread(
 // ── Plugin ──────────────────────────────────────────────────────────────
 
 export default async function webhookRoutes(fastify: FastifyInstance) {
-  // Capture raw body for all routes under this plugin so we can verify
-  // webhook signatures against the exact bytes the sender HMAC'd.
+  // Capture raw body for signature verification
   fastify.addHook(
     'preParsing',
     async (request: FastifyRequest, _reply: FastifyReply, payload) => {
@@ -124,7 +138,6 @@ export default async function webhookRoutes(fastify: FastifyInstance) {
       const raw = Buffer.concat(chunks).toString('utf8');
       request.rawBody = raw;
 
-      // Return a new stream-like readable so Fastify can still parse JSON
       const { Readable } = await import('node:stream');
       return Readable.from([raw]);
     },
@@ -132,25 +145,33 @@ export default async function webhookRoutes(fastify: FastifyInstance) {
 
   // ================================================================
   // POST /webhooks/whatsapp
+  // Try all WhatsApp accounts to find the matching one by signature
   // ================================================================
   fastify.post(
     '/whatsapp',
     async (request: FastifyRequest, reply: FastifyReply) => {
-      const creds = await getWhatsAppCredentials(fastify);
+      const accounts = await getAllWhatsAppAccounts(fastify);
 
-      // ── Signature verification ────────────────────────────────────
       const signature = (request.headers['x-signature'] as string) ?? '';
       const rawBody = request.rawBody ?? JSON.stringify(request.body);
 
-      if (!creds.apiKey || !verify360DialogSignature(rawBody, signature, creds.apiKey)) {
-        logger.warn('WhatsApp webhook: invalid signature');
+      // Find the account whose API key matches the signature
+      let matchedAccount: WhatsAppAccount | null = null;
+      for (const account of accounts) {
+        if (verify360DialogSignature(rawBody, signature, account.apiKey)) {
+          matchedAccount = account;
+          break;
+        }
+      }
+
+      if (!matchedAccount) {
+        logger.warn('WhatsApp webhook: no matching account for signature');
         return reply.status(401).send({ error: 'Invalid signature' });
       }
 
       // ── Parse incoming message ────────────────────────────────────
       const parsed = WhatsAppClient.parseIncoming(request.body);
       if (!parsed) {
-        // Could be a status update — acknowledge silently
         return reply.status(200).send({ status: 'ignored' });
       }
 
@@ -167,9 +188,10 @@ export default async function webhookRoutes(fastify: FastifyInstance) {
       }
 
       // ── Persist ───────────────────────────────────────────────────
+      const accountLabel = matchedAccount.label ?? 'WhatsApp';
       const threadId = await findOrCreateThread(
         fastify,
-        'WhatsApp',
+        `WhatsApp (${accountLabel})`,
         `+${parsed.from}`,
       );
 
@@ -183,6 +205,8 @@ export default async function webhookRoutes(fastify: FastifyInstance) {
           content,
           metadata: {
             channel: 'whatsapp',
+            whatsappAccountId: matchedAccount.id,
+            whatsappAccountLabel: matchedAccount.label,
             externalMessageId: parsed.messageId,
             contactName: parsed.name ?? null,
             mediaUrl: parsed.mediaUrl ?? null,
@@ -219,14 +243,13 @@ export default async function webhookRoutes(fastify: FastifyInstance) {
   );
 
   // ================================================================
-  // POST /webhooks/instagram  (Meta webhook for DMs + comments)
+  // POST /webhooks/instagram
   // ================================================================
   fastify.post(
     '/instagram',
     async (request: FastifyRequest, reply: FastifyReply) => {
       const creds = await getInstagramCredentials(fastify);
 
-      // ── Signature verification ────────────────────────────────────
       const signature = (request.headers['x-hub-signature-256'] as string) ?? '';
       const rawBody = request.rawBody ?? JSON.stringify(request.body);
 
@@ -250,7 +273,6 @@ export default async function webhookRoutes(fastify: FastifyInstance) {
           const text = (message.text as string) ?? '';
           const eventTimestamp = event.timestamp as number | undefined;
 
-          // Replay check
           const isNew = await checkReplayProtection(
             fastify.redis,
             msgId,
@@ -395,7 +417,6 @@ export default async function webhookRoutes(fastify: FastifyInstance) {
         return reply.status(403).send({ error: 'Invalid verify token' });
       }
 
-      // Meta expects the challenge echoed back as plain text
       return reply.type('text/plain').send(challenge);
     },
   );

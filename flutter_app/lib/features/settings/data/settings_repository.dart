@@ -58,6 +58,7 @@ class SettingsRepository {
         .toList();
   }
 
+  /// Save/update a single-account integration (backward compat)
   Future<void> saveIntegration(
     String service,
     Map<String, dynamic> credentials,
@@ -67,10 +68,52 @@ class SettingsRepository {
     });
   }
 
+  /// Add a new account for a multi-account service (e.g. WhatsApp)
+  Future<void> addAccount(
+    String service, {
+    required String label,
+    required Map<String, dynamic> credentials,
+  }) async {
+    await dio.post('/integrations/$service', data: {
+      'label': label,
+      'credentials': credentials,
+    });
+  }
+
+  /// Update an existing account by ID
+  Future<void> updateAccount(
+    String accountId, {
+    String? label,
+    Map<String, dynamic>? credentials,
+  }) async {
+    await dio.put('/integrations/accounts/$accountId', data: {
+      if (label != null) 'label': label,  // ignore: use_null_aware_elements
+      if (credentials != null) 'credentials': credentials,  // ignore: use_null_aware_elements
+    });
+  }
+
+  /// Delete an account by ID
+  Future<void> deleteAccount(String accountId) async {
+    await dio.delete('/integrations/accounts/$accountId');
+  }
+
+  /// Test a single-account integration by service name
   Future<bool> testIntegration(String service) async {
     try {
       final response = await dio.post('/integrations/$service/test');
-      return response.statusCode == 200;
+      final data = response.data;
+      return data is Map ? (data['success'] as bool? ?? response.statusCode == 200) : response.statusCode == 200;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Test a specific account by ID
+  Future<bool> testAccount(String accountId) async {
+    try {
+      final response = await dio.post('/integrations/accounts/$accountId/test');
+      final data = response.data;
+      return data is Map ? (data['success'] as bool? ?? response.statusCode == 200) : response.statusCode == 200;
     } catch (_) {
       return false;
     }

@@ -22,7 +22,7 @@ class ApprovalRepository {
         await _dio.get('/approvals', queryParameters: queryParams);
     final data = response.data;
     final List<dynamic> items =
-        data is List ? data : (data['data'] as List? ?? []);
+        data is List ? data : (data['approvals'] as List? ?? data['data'] as List? ?? []);
     return items
         .map((e) => ApprovalTask.fromJson(e as Map<String, dynamic>))
         .toList();

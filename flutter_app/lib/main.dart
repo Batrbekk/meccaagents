@@ -28,7 +28,7 @@ class AgentTeamApp extends ConsumerWidget {
     return MaterialApp.router(
       title: 'AgentTeam',
       debugShowCheckedModeBanner: false,
-      theme: AppTheme.darkTheme,
+      theme: AppTheme.lightTheme,
       routerConfig: router,
     );
   }

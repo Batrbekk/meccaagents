@@ -4,10 +4,19 @@ import { logger } from './logger.js';
 // Types
 // ---------------------------------------------------------------------------
 
+export type ContentPart =
+  | { type: 'text'; text: string }
+  | { type: 'image_url'; image_url: { url: string } };
+
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant' | 'tool';
-  content: string;
+  content: string | ContentPart[] | null;
   tool_call_id?: string;
+  tool_calls?: Array<{
+    id: string;
+    type: 'function';
+    function: { name: string; arguments: string };
+  }>;
 }
 
 export interface ChatTool {
@@ -311,14 +320,46 @@ export class OpenRouterClient {
       model?: string;
       choices?: Array<{
         message?: {
-          images?: string[];
+          content?: unknown;
+          images?: unknown[];
         };
       }>;
     };
 
-    const rawImages = json.choices?.[0]?.message?.images ?? [];
+    const message = json.choices?.[0]?.message;
+    const urls: string[] = [];
+
+    // Extract images from message.images (may be strings or objects)
+    const rawImages = message?.images ?? [];
+    for (const img of rawImages) {
+      if (typeof img === 'string') {
+        urls.push(img);
+      } else if (img && typeof img === 'object') {
+        const obj = img as Record<string, unknown>;
+        // Handle {type: "image_url", image_url: {url: "..."}}
+        const inner = obj.image_url as Record<string, unknown> | undefined;
+        if (inner?.url && typeof inner.url === 'string') {
+          urls.push(inner.url);
+        } else if (obj.url && typeof obj.url === 'string') {
+          urls.push(obj.url);
+        }
+      }
+    }
+
+    // Also extract from multimodal content (Gemini style)
+    if (urls.length === 0 && Array.isArray(message?.content)) {
+      for (const part of message!.content as Array<Record<string, unknown>>) {
+        if (part.type === 'image_url') {
+          const inner = part.image_url as Record<string, unknown> | undefined;
+          if (inner?.url && typeof inner.url === 'string') {
+            urls.push(inner.url);
+          }
+        }
+      }
+    }
+
     return {
-      images: rawImages.map((url) => ({ url })),
+      images: urls.map((url) => ({ url })),
       model: json.model ?? params.model,
     };
   }

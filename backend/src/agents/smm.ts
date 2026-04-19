@@ -271,7 +271,7 @@ export class SMMAgent extends BaseAgent {
     );
 
     const result = await getOpenRouter().generateImage({
-      model: 'black-forest-labs/flux-1.1-pro',
+      model: 'google/gemini-3-pro-image-preview',
       prompt,
       imageConfig: { aspectRatio },
     });

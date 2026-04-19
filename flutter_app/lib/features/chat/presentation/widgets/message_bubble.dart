@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_markdown/flutter_markdown.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:agentteam/core/theme/app_theme.dart';
 import 'package:agentteam/core/theme/agent_colors.dart';
 import 'package:agentteam/features/chat/domain/message.dart';
 
@@ -25,25 +28,29 @@ class MessageBubble extends StatelessWidget {
         position.dx + 1,
         position.dy + 1,
       ),
-      color: AgentColors.card,
+      color: Colors.white,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: const BorderSide(color: AgentColors.borderColor),
+      ),
       items: [
-        const PopupMenuItem(
+        PopupMenuItem(
           value: 'delete',
           child: Row(
             children: [
-              Icon(Icons.delete_outline, color: Colors.redAccent, size: 20),
-              SizedBox(width: 8),
-              Text('Delete', style: TextStyle(color: Colors.redAccent)),
+              const Icon(Icons.delete_outline, color: Colors.redAccent, size: 20),
+              const SizedBox(width: 8),
+              Text('Delete', style: GoogleFonts.inter(color: Colors.redAccent)),
             ],
           ),
         ),
-        const PopupMenuItem(
+        PopupMenuItem(
           value: 'copy',
           child: Row(
             children: [
-              Icon(Icons.copy, color: Colors.white70, size: 20),
-              SizedBox(width: 8),
-              Text('Copy', style: TextStyle(color: Colors.white70)),
+              Icon(Icons.copy, color: AppTheme.foregroundSecondary, size: 20),
+              const SizedBox(width: 8),
+              Text('Copy', style: GoogleFonts.inter(color: AppTheme.foregroundSecondary)),
             ],
           ),
         ),
@@ -53,22 +60,26 @@ class MessageBubble extends StatelessWidget {
         showDialog<bool>(
           context: context,
           builder: (ctx) => AlertDialog(
-            backgroundColor: AgentColors.surface,
-            title: const Text('Delete message?',
-                style: TextStyle(color: Colors.white)),
-            content: const Text(
+            backgroundColor: Colors.white,
+            title: Text('Delete message?',
+                style: GoogleFonts.inter(
+                  color: AppTheme.foregroundPrimary,
+                  fontWeight: FontWeight.w600,
+                )),
+            content: Text(
               'This action cannot be undone.',
-              style: TextStyle(color: Colors.white70),
+              style: GoogleFonts.inter(color: AppTheme.foregroundSecondary),
             ),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(ctx, false),
-                child: const Text('Cancel'),
+                child: Text('Cancel',
+                    style: GoogleFonts.inter(color: AppTheme.foregroundSecondary)),
               ),
               TextButton(
                 onPressed: () => Navigator.pop(ctx, true),
-                child: const Text('Delete',
-                    style: TextStyle(color: Colors.redAccent)),
+                child: Text('Delete',
+                    style: GoogleFonts.inter(color: Colors.redAccent)),
               ),
             ],
           ),
@@ -86,124 +97,145 @@ class MessageBubble extends StatelessWidget {
     final agentColor = AgentColors.forAgent(message.agentSlug);
     final agentName = AgentColors.displayName(message.agentSlug);
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-      child: GestureDetector(
-        onLongPressStart: isUser
-            ? (details) => _showContextMenu(context, details.globalPosition)
-            : null,
-        child: Row(
-          mainAxisAlignment:
-              isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            if (!isUser) ...[
-              Container(
-                width: 28,
-                height: 28,
-                decoration: BoxDecoration(
-                  color: agentColor,
-                  shape: BoxShape.circle,
-                ),
-                child: Center(
-                  child: Text(
-                    agentName.isNotEmpty ? agentName[0].toUpperCase() : '?',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 13,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-            ],
-            Flexible(
-              child: Column(
-                crossAxisAlignment:
-                    isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-                children: [
-                  if (!isUser)
-                    Padding(
-                      padding: const EdgeInsets.only(left: 4, bottom: 3),
-                      child: Text(
-                        agentName,
-                        style: TextStyle(
-                          color: agentColor,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                  Container(
-                    constraints: BoxConstraints(
-                      maxWidth: MediaQuery.of(context).size.width * 0.72,
-                    ),
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 14, vertical: 10),
-                    decoration: BoxDecoration(
-                      color: isUser ? AgentColors.userBubble : AgentColors.card,
-                      borderRadius: BorderRadius.only(
-                        topLeft: const Radius.circular(16),
-                        topRight: const Radius.circular(16),
-                        bottomLeft: isUser
-                            ? const Radius.circular(16)
-                            : const Radius.circular(4),
-                        bottomRight: isUser
-                            ? const Radius.circular(4)
-                            : const Radius.circular(16),
-                      ),
-                      border: isUser
-                          ? null
-                          : Border(
-                              left: BorderSide(
-                                color: agentColor.withValues(alpha: 0.6),
-                                width: 2,
-                              ),
-                            ),
-                    ),
-                    child: _buildContent(),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.only(top: 3, left: 4, right: 4),
-                    child: Text(
-                      _formatTime(message.createdAt),
-                      style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.35),
-                        fontSize: 11,
-                      ),
-                    ),
-                  ),
-                ],
+    final screenWidth = MediaQuery.of(context).size.width;
+    final maxBubble = screenWidth > 400 ? 240.0 : screenWidth * 0.6;
+
+    if (isUser) {
+      return GestureDetector(
+        onLongPressStart: (details) => _showContextMenu(context, details.globalPosition),
+        child: Align(
+          alignment: Alignment.centerRight,
+          child: Container(
+            constraints: BoxConstraints(maxWidth: maxBubble),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: const BoxDecoration(
+              color: AgentColors.userBubble,
+              borderRadius: BorderRadius.only(
+                topLeft: Radius.circular(16),
+                topRight: Radius.circular(16),
+                bottomRight: Radius.circular(4),
+                bottomLeft: Radius.circular(16),
               ),
             ),
-            if (isUser) const SizedBox(width: 36),
-          ],
+            child: _buildContent(isUserMsg: true),
+          ),
         ),
-      ),
+      );
+    }
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 28,
+          height: 28,
+          decoration: BoxDecoration(
+            color: agentColor,
+            shape: BoxShape.circle,
+          ),
+          child: Center(
+            child: Text(
+              agentName.isNotEmpty ? agentName[0].toUpperCase() : '?',
+              style: GoogleFonts.inter(
+                color: Colors.white,
+                fontSize: 14,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Container(
+          constraints: BoxConstraints(maxWidth: maxBubble),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: const BoxDecoration(
+            color: Color(0xFFF3F4F6),
+            borderRadius: BorderRadius.only(
+              topLeft: Radius.circular(4),
+              topRight: Radius.circular(16),
+              bottomRight: Radius.circular(16),
+              bottomLeft: Radius.circular(16),
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                agentName,
+                style: GoogleFonts.inter(
+                  color: agentColor,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 2),
+              _buildContent(isUserMsg: false),
+            ],
+          ),
+        ),
+      ],
     );
   }
 
-  Widget _buildContent() {
+  Widget _buildContent({required bool isUserMsg}) {
     final files = message.metadata?['files'] as List?;
     final hasFiles = files != null && files.isNotEmpty;
+
+    // Text colors
+    final textColor = isUserMsg ? Colors.white : AppTheme.foregroundPrimary;
+    final codeColor = isUserMsg ? Colors.white70 : const Color(0xFF059669);
+    final codeBg = isUserMsg
+        ? Colors.white.withValues(alpha: 0.1)
+        : const Color(0xFFECFDF5);
+    final linkColor = isUserMsg ? Colors.white : AppTheme.accentPrimary;
+    final fileTextColor = isUserMsg ? Colors.white70 : AppTheme.foregroundSecondary;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         if (message.content != null && message.content!.isNotEmpty)
-          Text(
-            message.content!,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 14,
-              height: 1.4,
+          MarkdownBody(
+            data: message.content!,
+            selectable: true,
+            styleSheet: MarkdownStyleSheet(
+              p: GoogleFonts.inter(color: textColor, fontSize: 14, height: 1.4),
+              strong: GoogleFonts.inter(color: textColor, fontSize: 14, fontWeight: FontWeight.bold),
+              em: GoogleFonts.inter(color: textColor, fontSize: 14, fontStyle: FontStyle.italic),
+              h1: GoogleFonts.inter(color: textColor, fontSize: 22, fontWeight: FontWeight.bold),
+              h2: GoogleFonts.inter(color: textColor, fontSize: 19, fontWeight: FontWeight.bold),
+              h3: GoogleFonts.inter(color: textColor, fontSize: 16, fontWeight: FontWeight.w600),
+              code: TextStyle(
+                color: codeColor,
+                backgroundColor: codeBg,
+                fontSize: 13,
+                fontFamily: 'monospace',
+              ),
+              codeblockDecoration: BoxDecoration(
+                color: codeBg,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              listBullet: GoogleFonts.inter(color: textColor, fontSize: 14),
+              a: GoogleFonts.inter(color: linkColor, decoration: TextDecoration.underline),
+              blockquoteDecoration: BoxDecoration(
+                border: Border(left: BorderSide(
+                  color: isUserMsg
+                      ? Colors.white.withValues(alpha: 0.3)
+                      : AppTheme.foregroundTertiary,
+                  width: 3,
+                )),
+              ),
+              blockquote: GoogleFonts.inter(
+                color: isUserMsg
+                    ? Colors.white.withValues(alpha: 0.7)
+                    : AppTheme.foregroundSecondary,
+                fontSize: 14,
+              ),
             ),
           ),
         if (hasFiles) ...[
           if (message.content != null && message.content!.isNotEmpty)
             const SizedBox(height: 6),
-          ...files!.map((f) {
+          ...files.map((f) {
             final name = f['name'] as String? ?? 'file';
             final mime = f['mimeType'] as String? ?? '';
             return Padding(
@@ -216,8 +248,8 @@ class MessageBubble extends StatelessWidget {
                   Flexible(
                     child: Text(
                       name,
-                      style: const TextStyle(
-                          color: Colors.white70,
+                      style: GoogleFonts.inter(
+                          color: fileTextColor,
                           fontSize: 12,
                           decoration: TextDecoration.underline),
                       overflow: TextOverflow.ellipsis,
@@ -252,10 +284,4 @@ class MessageBubble extends StatelessWidget {
     return Colors.blue;
   }
 
-  String _formatTime(DateTime dt) {
-    final local = dt.toLocal();
-    final h = local.hour.toString().padLeft(2, '0');
-    final m = local.minute.toString().padLeft(2, '0');
-    return '$h:$m';
-  }
 }

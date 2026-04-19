@@ -55,7 +55,15 @@ export function errorHandler(
     });
   }
 
-  // Unexpected errors — log and return generic message
+  // Fastify empty JSON body — return 400 instead of 500
+  if ('code' in error && (error as { code: string }).code === 'FST_ERR_CTP_EMPTY_JSON_BODY') {
+    return reply.status(400).send({
+      error: 'VALIDATION_ERROR',
+      message: 'Request body cannot be empty when Content-Type is application/json',
+    });
+  }
+
+  // Unexpected errors ��� log and return generic message
   _request.log.error(error, 'Unhandled error');
   return reply.status(500).send({
     error: 'INTERNAL_ERROR',

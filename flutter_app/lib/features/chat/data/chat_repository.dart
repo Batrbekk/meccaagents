@@ -83,4 +83,16 @@ class ChatRepository {
     );
     return Message.fromJson(response.data as Map<String, dynamic>);
   }
+
+  /// Returns the slug of the first agent with status 'thinking', or null.
+  Future<String?> getThinkingAgent() async {
+    final response = await dio.get('/agents');
+    final agents = (response.data['agents'] as List<dynamic>?) ?? [];
+    for (final agent in agents) {
+      if (agent['status'] == 'thinking') {
+        return agent['slug'] as String?;
+      }
+    }
+    return null;
+  }
 }

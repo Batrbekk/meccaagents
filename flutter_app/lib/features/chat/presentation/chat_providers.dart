@@ -48,6 +48,7 @@ class MessagesState {
   final bool isLoadingMore;
   final bool isSending;
   final bool agentTyping;
+  final String? typingAgentSlug;
 
   const MessagesState({
     this.messages = const [],
@@ -55,6 +56,7 @@ class MessagesState {
     this.isLoadingMore = false,
     this.isSending = false,
     this.agentTyping = false,
+    this.typingAgentSlug,
   });
 
   MessagesState copyWith({
@@ -63,7 +65,9 @@ class MessagesState {
     bool? isLoadingMore,
     bool? isSending,
     bool? agentTyping,
+    String? typingAgentSlug,
     bool clearCursor = false,
+    bool clearTypingAgent = false,
   }) {
     return MessagesState(
       messages: messages ?? this.messages,
@@ -71,6 +75,7 @@ class MessagesState {
       isLoadingMore: isLoadingMore ?? this.isLoadingMore,
       isSending: isSending ?? this.isSending,
       agentTyping: agentTyping ?? this.agentTyping,
+      typingAgentSlug: clearTypingAgent ? null : (typingAgentSlug ?? this.typingAgentSlug),
     );
   }
 }
@@ -111,23 +116,30 @@ class MessagesNotifier extends AsyncNotifier<MessagesState> {
 
     try {
       final repo = ref.read(chatRepositoryProvider);
-      final result = await repo.getMessages(_threadId);
+      final results = await Future.wait([
+        repo.getMessages(_threadId),
+        repo.getThinkingAgent(),
+      ]);
+
+      final result = results[0] as ({List<Message> messages, String? nextCursor});
+      final thinkingSlug = results[1] as String?;
 
       // Check for new messages
       final newMessages = result.messages;
-      if (newMessages.isEmpty && current.messages.isEmpty) return;
 
       // Detect if there are new messages (compare first message id)
       final hasNew = newMessages.isNotEmpty &&
           (current.messages.isEmpty || newMessages.first.id != current.messages.first.id);
 
-      if (hasNew) {
-        // If newest message is from agent, stop typing indicator
-        final newestIsAgent = newMessages.isNotEmpty && newMessages.first.senderType == 'agent';
+      final isThinking = thinkingSlug != null;
+
+      if (hasNew || isThinking != current.agentTyping || thinkingSlug != current.typingAgentSlug) {
         state = AsyncData(current.copyWith(
-          messages: newMessages,
-          nextCursor: result.nextCursor,
-          agentTyping: newestIsAgent ? false : current.agentTyping,
+          messages: hasNew ? newMessages : null,
+          nextCursor: hasNew ? result.nextCursor : null,
+          agentTyping: isThinking,
+          typingAgentSlug: thinkingSlug,
+          clearTypingAgent: thinkingSlug == null,
         ));
       }
     } catch (_) {
@@ -175,7 +187,34 @@ class MessagesNotifier extends AsyncNotifier<MessagesState> {
         state = AsyncData(updated.copyWith(
           messages: [message, ...updated.messages],
           isSending: false,
-          agentTyping: true, // Show "thinking..." until agent responds
+          agentTyping: true,
+        ));
+      } else {
+        state = AsyncData(updated.copyWith(isSending: false, agentTyping: true));
+      }
+    } catch (e) {
+      final updated = state.value ?? current;
+      state = AsyncData(updated.copyWith(isSending: false));
+      rethrow;
+    }
+  }
+
+  Future<void> sendMessageWithFiles(String content, {List<Map<String, dynamic>>? files}) async {
+    final current = state.value;
+    if (current == null) return;
+
+    state = AsyncData(current.copyWith(isSending: true));
+
+    try {
+      final repo = ref.read(chatRepositoryProvider);
+      final message = await repo.sendMessageWithFiles(_threadId, content, files: files);
+      final updated = state.value ?? current;
+      final exists = updated.messages.any((m) => m.id == message.id);
+      if (!exists) {
+        state = AsyncData(updated.copyWith(
+          messages: [message, ...updated.messages],
+          isSending: false,
+          agentTyping: true,
         ));
       } else {
         state = AsyncData(updated.copyWith(isSending: false, agentTyping: true));

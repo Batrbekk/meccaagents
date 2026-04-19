@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:agentteam/core/theme/agent_colors.dart';
 
 class AgentTypingIndicator extends StatefulWidget {
+  final String? agentSlug;
   final Color? color;
 
-  const AgentTypingIndicator({super.key, this.color});
+  const AgentTypingIndicator({super.key, this.agentSlug, this.color});
 
   @override
   State<AgentTypingIndicator> createState() => _AgentTypingIndicatorState();
@@ -14,6 +16,13 @@ class _AgentTypingIndicatorState extends State<AgentTypingIndicator>
     with TickerProviderStateMixin {
   late final List<AnimationController> _controllers;
   late final List<Animation<double>> _animations;
+
+  // Three dot colors per the design spec
+  static const List<Color> _dotColors = [
+    Color(0xFF9CA3AF),
+    Color(0xFFB4B9C2),
+    Color(0xFFD1D5DB),
+  ];
 
   @override
   void initState() {
@@ -26,7 +35,7 @@ class _AgentTypingIndicatorState extends State<AgentTypingIndicator>
     });
 
     _animations = _controllers.map((c) {
-      return Tween<double>(begin: 0, end: -8).animate(
+      return Tween<double>(begin: 0, end: -6).animate(
         CurvedAnimation(parent: c, curve: Curves.easeInOut),
       );
     }).toList();
@@ -51,71 +60,99 @@ class _AgentTypingIndicatorState extends State<AgentTypingIndicator>
 
   @override
   Widget build(BuildContext context) {
-    final dotColor = widget.color ?? AgentColors.orchestrator;
+    final slug = widget.agentSlug;
+    final agentColor = slug != null
+        ? AgentColors.forAgent(slug)
+        : (widget.color ?? AgentColors.orchestrator);
+    final agentName = slug != null
+        ? AgentColors.displayName(slug)
+        : null;
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 8),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Avatar placeholder
+          // Agent avatar — 28x28 circle with initial
           Container(
             width: 28,
             height: 28,
             decoration: BoxDecoration(
-              color: dotColor.withValues(alpha: 0.6),
+              color: agentColor,
               shape: BoxShape.circle,
             ),
-            child: const Center(
-              child: Icon(Icons.auto_awesome, size: 14, color: Colors.white),
+            child: Center(
+              child: slug != null
+                  ? Text(
+                      agentName!.isNotEmpty ? agentName[0].toUpperCase() : '?',
+                      style: GoogleFonts.inter(
+                        color: Colors.white,
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    )
+                  : const Icon(Icons.auto_awesome, size: 14, color: Colors.white),
             ),
           ),
           const SizedBox(width: 8),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            decoration: BoxDecoration(
-              color: AgentColors.card,
-              borderRadius: const BorderRadius.only(
-                topLeft: Radius.circular(16),
-                topRight: Radius.circular(16),
-                bottomRight: Radius.circular(16),
-                bottomLeft: Radius.circular(4),
-              ),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  'Agent thinking',
-                  style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.5),
-                    fontSize: 13,
+          // Bubble with agent name + dots
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Agent name label above bubble (matching agent message style)
+              if (agentName != null)
+                Padding(
+                  padding: const EdgeInsets.only(left: 4, bottom: 2),
+                  child: Text(
+                    agentName,
+                    style: GoogleFonts.inter(
+                      color: agentColor,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ),
-                const SizedBox(width: 8),
-                ...List.generate(3, (i) {
-                  return _BounceDot(
-                    listenable: _animations[i],
-                    builder: (context, child) {
-                      return Transform.translate(
-                        offset: Offset(0, _animations[i].value),
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 2),
-                          child: Container(
-                            width: 7,
-                            height: 7,
-                            decoration: BoxDecoration(
-                              color: dotColor,
-                              shape: BoxShape.circle,
+              // Typing bubble
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                decoration: const BoxDecoration(
+                  color: Color(0xFFF3F4F6),
+                  borderRadius: BorderRadius.only(
+                    topLeft: Radius.circular(4),
+                    topRight: Radius.circular(16),
+                    bottomRight: Radius.circular(16),
+                    bottomLeft: Radius.circular(16),
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: List.generate(3, (i) {
+                    return _BounceDot(
+                      listenable: _animations[i],
+                      builder: (context, child) {
+                        return Transform.translate(
+                          offset: Offset(0, _animations[i].value),
+                          child: Padding(
+                            padding: EdgeInsets.only(
+                              left: i == 0 ? 0 : 6,
+                            ),
+                            child: Container(
+                              width: 6,
+                              height: 6,
+                              decoration: BoxDecoration(
+                                color: _dotColors[i],
+                                shape: BoxShape.circle,
+                              ),
                             ),
                           ),
-                        ),
-                      );
-                    },
-                  );
-                }),
-              ],
-            ),
+                        );
+                      },
+                    );
+                  }),
+                ),
+              ),
+            ],
           ),
         ],
       ),

@@ -3,6 +3,7 @@ import { Type, type Static } from '@sinclair/typebox';
 import { eq, and, lt, desc } from 'drizzle-orm';
 import { approvalTasks } from '../db/schema.js';
 import { NotFoundError, ForbiddenError } from '../lib/errors.js';
+import { logger } from '../lib/logger.js';
 
 // ---------------------------------------------------------------------------
 // Schemas
@@ -116,7 +117,7 @@ export default async function approvalRoutes(fastify: FastifyInstance) {
       preHandler: [fastify.authenticate],
       schema: { params: ApprovalIdParams },
     },
-    async (request, _reply) => {
+    async (request, reply) => {
       if (request.user.role !== 'owner') {
         throw new ForbiddenError('Only owners can approve tasks');
       }
@@ -136,7 +137,19 @@ export default async function approvalRoutes(fastify: FastifyInstance) {
 
       if (!updated) throw new NotFoundError('Approval task');
 
-      return updated;
+      // Return without the heavy payload to avoid serialization issues
+      return {
+        id: updated.id,
+        agentSlug: updated.agentSlug,
+        actionType: updated.actionType,
+        status: updated.status,
+        resolvedAt: updated.resolvedAt,
+        resolvedBy: updated.resolvedBy,
+        notes: updated.notes,
+        requestedAt: updated.requestedAt,
+        threadId: updated.threadId,
+        messageId: updated.messageId,
+      };
     },
   );
 

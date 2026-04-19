@@ -29,6 +29,24 @@ const app = Fastify({
   trustProxy: true,
 });
 
+// Allow empty body with Content-Type: application/json (e.g. POST /approvals/:id/approve)
+app.addContentTypeParser(
+  'application/json',
+  { parseAs: 'string' },
+  (_request, body, done) => {
+    const str = (body as string).trim();
+    if (!str) {
+      done(null, {});
+      return;
+    }
+    try {
+      done(null, JSON.parse(str));
+    } catch (err) {
+      done(err as Error, undefined);
+    }
+  },
+);
+
 // --- Global error handler ---
 app.setErrorHandler(errorHandler);
 
@@ -66,7 +84,8 @@ await app.register(authPlugin);
 // --- Load integration keys from DB into env on startup ---
 try {
   const { decrypt } = await import('./lib/crypto.js');
-  const rows = await app.sql`SELECT service, credentials FROM integrations WHERE is_active = true`;
+  const rows = await app.sql`SELECT service, label, credentials FROM integrations WHERE is_active = true`;
+  let waCount = 0;
   for (const row of rows) {
     try {
       const creds = JSON.parse(decrypt(row.credentials));
@@ -77,7 +96,13 @@ try {
       if (row.service === 'notion' && creds.integrationToken) {
         process.env.NOTION_TOKEN = creds.integrationToken;
       }
+      if (row.service === 'whatsapp' && creds.apiKey) {
+        waCount++;
+      }
     } catch { /* skip invalid */ }
+  }
+  if (waCount > 0) {
+    app.log.info(`Loaded ${waCount} WhatsApp account(s) from DB`);
   }
 } catch { /* DB not ready yet, skip */ }
 

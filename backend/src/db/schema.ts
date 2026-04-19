@@ -154,13 +154,20 @@ export const toolLogs = pgTable(
 // ============================
 // Integrations (credentials encrypted with AES-256-GCM)
 // ============================
-export const integrations = pgTable('integrations', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  service: text('service').notNull().unique(),
-  credentials: text('credentials').notNull(), // AES-256-GCM encrypted JSON
-  isActive: boolean('is_active').notNull().default(false),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-});
+export const integrations = pgTable(
+  'integrations',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    service: text('service').notNull(),
+    label: text('label'), // e.g. "Mecca Cola Almaty" for multi-account services
+    credentials: text('credentials').notNull(), // AES-256-GCM encrypted JSON
+    isActive: boolean('is_active').notNull().default(false),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('idx_integrations_service').on(t.service),
+  ],
+);
 
 // ============================
 // Files

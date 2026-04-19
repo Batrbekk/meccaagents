@@ -23,17 +23,19 @@ export default async function analyticsRoutes(fastify: FastifyInstance) {
       const now = new Date();
       const todayStart = new Date(now);
       todayStart.setUTCHours(0, 0, 0, 0);
+      const todayISO = todayStart.toISOString();
 
       const weekStart = new Date(now);
       weekStart.setUTCDate(weekStart.getUTCDate() - 7);
+      const weekISO = weekStart.toISOString();
 
       // Aggregate tool_logs stats per agent in a single query
       const statsRows = await db
         .select({
           agentSlug: toolLogs.agentSlug,
           totalCalls: sql<number>`count(*)::int`,
-          callsToday: sql<number>`count(*) filter (where ${toolLogs.createdAt} >= ${todayStart})::int`,
-          callsThisWeek: sql<number>`count(*) filter (where ${toolLogs.createdAt} >= ${weekStart})::int`,
+          callsToday: sql<number>`count(*) filter (where ${toolLogs.createdAt} >= ${todayISO}::timestamptz)::int`,
+          callsThisWeek: sql<number>`count(*) filter (where ${toolLogs.createdAt} >= ${weekISO}::timestamptz)::int`,
           avgDurationMs: sql<number>`coalesce(avg(${toolLogs.durationMs}), 0)::real`,
           errorCount: sql<number>`count(*) filter (where ${toolLogs.status} = 'error')::int`,
         })
@@ -124,6 +126,7 @@ export default async function analyticsRoutes(fastify: FastifyInstance) {
       const sevenDaysAgo = new Date();
       sevenDaysAgo.setUTCDate(sevenDaysAgo.getUTCDate() - 7);
       sevenDaysAgo.setUTCHours(0, 0, 0, 0);
+      const sevenDaysISO = sevenDaysAgo.toISOString();
 
       const messagesLast7Days = await db
         .select({
@@ -131,7 +134,7 @@ export default async function analyticsRoutes(fastify: FastifyInstance) {
           count: sql<number>`count(*)::int`,
         })
         .from(messages)
-        .where(sql`${messages.createdAt} >= ${sevenDaysAgo}`)
+        .where(sql`${messages.createdAt} >= ${sevenDaysISO}::timestamptz`)
         .groupBy(sql`${messages.createdAt}::date`)
         .orderBy(sql`${messages.createdAt}::date`);
 

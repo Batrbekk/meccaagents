@@ -1,5 +1,6 @@
 import { Queue, Worker } from 'bullmq';
 import { Redis } from 'ioredis';
+import { Client as MinioClient } from 'minio';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import { desc, eq } from 'drizzle-orm';
 import postgres from 'postgres';
@@ -31,6 +32,36 @@ if (!databaseUrl) throw new Error('DATABASE_URL is required for agent-runner wor
 
 const sql = postgres(databaseUrl, { max: 10 });
 const db = drizzle(sql, { schema });
+
+// ── MinIO client for generating presigned URLs ──────────────────────
+const minio = new MinioClient({
+  endPoint: process.env.MINIO_ENDPOINT ?? 'minio',
+  port: Number(process.env.MINIO_PORT ?? 9000),
+  useSSL: false,
+  accessKey: process.env.MINIO_ROOT_USER ?? 'minioadmin',
+  secretKey: process.env.MINIO_ROOT_PASSWORD ?? 'changeme',
+});
+const MINIO_BUCKET = process.env.MINIO_BUCKET ?? 'agentteam-files';
+
+// ── Load integration keys from DB into env (same as app.ts) ─────────
+try {
+  const { decrypt } = await import('../lib/crypto.js');
+  const integrationRows = await sql`SELECT service, credentials FROM integrations WHERE is_active = true`;
+  for (const row of integrationRows) {
+    try {
+      const creds = JSON.parse(decrypt(row.credentials));
+      if (row.service === 'openrouter' && creds.apiKey) {
+        process.env.OPENROUTER_API_KEY = creds.apiKey;
+        logger.info('Worker: Loaded OpenRouter API key from DB');
+      }
+      if (row.service === 'notion' && creds.integrationToken) {
+        process.env.NOTION_TOKEN = creds.integrationToken;
+      }
+    } catch { /* skip invalid */ }
+  }
+} catch (err) {
+  logger.warn({ err }, 'Worker: Failed to load integration keys from DB');
+}
 
 // ── BullMQ Queue ─────────────────────────────────────────────────────
 const QUEUE_NAME = 'agent-run';
@@ -109,12 +140,13 @@ export const agentWorker = new Worker<AgentJobData>(
       // 1. Set agent status to thinking
       await setAgentStatus(agentSlug, 'thinking');
 
-      // 2. Load last 20 messages from the thread as context
+      // 2. Load last 20 messages from the thread as context (including metadata for files)
       const recentMessages = await db
         .select({
           senderType: messages.senderType,
           senderId: messages.senderId,
           content: messages.content,
+          metadata: messages.metadata,
           createdAt: messages.createdAt,
         })
         .from(messages)
@@ -122,14 +154,85 @@ export const agentWorker = new Worker<AgentJobData>(
         .orderBy(desc(messages.createdAt))
         .limit(20);
 
-      // Reverse to chronological order and map to role/content pairs
-      const context = recentMessages
-        .reverse()
-        .filter((m) => m.content != null)
-        .map((m) => ({
+      // Reverse to chronological order and build context with file support
+      const chronological = recentMessages.reverse().filter((m) => m.content != null);
+
+      // Only load images for the LAST user message with files (to avoid context bloat)
+      let lastUserWithFilesIdx = -1;
+      for (let i = chronological.length - 1; i >= 0; i--) {
+        const meta = chronological[i]!.metadata as Record<string, unknown> | null;
+        const files = (meta?.files as Array<Record<string, unknown>> | undefined) ?? [];
+        if (chronological[i]!.senderType === 'user' && files.some((f) => ((f.mimeType as string) || '').startsWith('image/'))) {
+          lastUserWithFilesIdx = i;
+          break;
+        }
+      }
+
+      const context: Array<{
+        role: string;
+        content: string;
+        fileUrls?: Array<{ url: string; mimeType: string; name: string }>;
+      }> = [];
+
+      for (let idx = 0; idx < chronological.length; idx++) {
+        const m = chronological[idx]!;
+        const entry: (typeof context)[number] = {
           role: m.senderType === 'user' ? 'user' : 'assistant',
           content: m.content!,
-        }));
+        };
+
+        // Extract file info from metadata
+        const meta = m.metadata as Record<string, unknown> | null;
+        const metaFiles = (meta?.files as Array<Record<string, unknown>> | undefined) ?? [];
+
+        // Only load actual image data for the last user message with images
+        const shouldLoadImages = idx === lastUserWithFilesIdx;
+
+        if (metaFiles.length > 0 && shouldLoadImages) {
+          const fileUrls: Array<{ url: string; mimeType: string; name: string }> = [];
+          for (const f of metaFiles) {
+            const fileId = f.id as string | undefined;
+            const name = (f.name ?? f.originalName ?? 'file') as string;
+            const mime = (f.mimeType ?? '') as string;
+
+            if (fileId) {
+              try {
+                const [fileRow] = await db
+                  .select({ storagePath: schema.files.storagePath })
+                  .from(schema.files)
+                  .where(eq(schema.files.id, fileId))
+                  .limit(1);
+
+                if (fileRow) {
+                  const isImage = mime.startsWith('image/');
+                  if (isImage) {
+                    // For images: read from MinIO and encode as base64 data URL
+                    // (presigned URLs use internal Docker hostname, unreachable by OpenRouter)
+                    const chunks: Buffer[] = [];
+                    const stream = await minio.getObject(MINIO_BUCKET, fileRow.storagePath);
+                    for await (const chunk of stream) {
+                      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+                    }
+                    const base64 = Buffer.concat(chunks).toString('base64');
+                    const dataUrl = `data:${mime};base64,${base64}`;
+                    fileUrls.push({ url: dataUrl, mimeType: mime, name });
+                  } else {
+                    // For non-image files: just describe them (agent can't download anyway)
+                    fileUrls.push({ url: `[file:${fileId}]`, mimeType: mime, name });
+                  }
+                }
+              } catch (err) {
+                logger.warn({ err, fileId }, 'Failed to load file for agent context');
+              }
+            }
+          }
+          if (fileUrls.length > 0) {
+            entry.fileUrls = fileUrls;
+          }
+        }
+
+        context.push(entry);
+      }
 
       // 3. Execute the agent
       const result = await agent.execute({
