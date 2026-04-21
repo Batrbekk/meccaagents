@@ -12,7 +12,7 @@ class IntegrationsScreen extends ConsumerWidget {
 
   // Service icon config: background color and icon color per service
   static const _serviceStyles = <String, ({Color bg, Color iconColor, IconData icon})>{
-    'openrouter': (bg: Color(0xFFEDE9FE), iconColor: AppTheme.accentPrimary, icon: Icons.smart_toy_outlined),
+    'openrouter': (bg: AppTheme.accentPrimaryLight, iconColor: AppTheme.accentPrimary, icon: Icons.smart_toy_outlined),
     'whatsapp': (bg: Color(0xFFD1FAE5), iconColor: Color(0xFF16A34A), icon: Icons.chat_bubble_outline),
     'instagram': (bg: Color(0xFFFCE7F3), iconColor: Color(0xFFEC4899), icon: Icons.camera_alt_outlined),
     'tiktok': (bg: Color(0xFF1A1A1A), iconColor: Colors.white, icon: Icons.video_library_outlined),

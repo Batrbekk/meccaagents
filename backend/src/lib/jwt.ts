@@ -17,7 +17,7 @@ export async function generateAccessToken(userId: string, role: string): Promise
     .setProtectedHeader({ alg: 'HS256' })
     .setSubject(userId)
     .setIssuedAt()
-    .setExpirationTime(process.env.JWT_ACCESS_TTL ?? '30d')
+    .setExpirationTime(process.env.JWT_ACCESS_TTL ?? '180d')
     .sign(getSecret());
 }
 

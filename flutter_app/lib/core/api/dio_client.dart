@@ -1,5 +1,7 @@
 import 'package:dio/dio.dart';
+import 'package:agentteam/core/auth/auth_container.dart';
 import 'package:agentteam/core/auth/secure_storage.dart';
+import 'package:agentteam/features/auth/presentation/auth_provider.dart';
 
 const String _baseUrl = 'http://localhost:3000';
 
@@ -33,9 +35,11 @@ class _AuthInterceptor extends Interceptor {
     ErrorInterceptorHandler handler,
   ) async {
     if (err.response?.statusCode == 401 && !_isRefreshing) {
-      // Token expired — clear and let UI redirect to login
+      // Token expired/invalid — clear storage and invalidate the auth
+      // provider so the router redirects to /login.
       _isRefreshing = true;
       await AuthStorage.clearAll();
+      appContainer.invalidate(authStateProvider);
       _isRefreshing = false;
     }
     handler.next(err);

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 
+import 'core/auth/auth_container.dart';
 import 'core/router/app_router.dart';
 import 'core/theme/app_theme.dart';
 
@@ -12,8 +13,9 @@ Future<void> main() async {
   await Hive.initFlutter();
 
   runApp(
-    const ProviderScope(
-      child: AgentTeamApp(),
+    UncontrolledProviderScope(
+      container: appContainer,
+      child: const AgentTeamApp(),
     ),
   );
 }

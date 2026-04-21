@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:agentteam/core/theme/app_theme.dart';
 import 'package:agentteam/features/auth/presentation/auth_provider.dart';
 import 'package:agentteam/features/auth/presentation/login_screen.dart';
 import 'package:agentteam/features/chat/presentation/main_chat_screen.dart';
@@ -21,13 +22,36 @@ final _approvalsNavigatorKey =
 final _settingsNavigatorKey =
     GlobalKey<NavigatorState>(debugLabel: 'settings');
 
+/// Bridges Riverpod → GoRouter's `refreshListenable` without recreating the
+/// router whenever auth state changes (which would leak GlobalKey conflicts).
+class _AuthRefreshNotifier extends ChangeNotifier {
+  _AuthRefreshNotifier(this._ref) {
+    _sub = _ref.listen<AsyncValue<dynamic>>(
+      authStateProvider,
+      (_, __) => notifyListeners(),
+      fireImmediately: false,
+    );
+  }
+  final Ref _ref;
+  late final ProviderSubscription<AsyncValue<dynamic>> _sub;
+
+  @override
+  void dispose() {
+    _sub.close();
+    super.dispose();
+  }
+}
+
 final routerProvider = Provider<GoRouter>((ref) {
-  final authState = ref.watch(authStateProvider);
+  final refresh = _AuthRefreshNotifier(ref);
+  ref.onDispose(refresh.dispose);
 
   return GoRouter(
     navigatorKey: _rootNavigatorKey,
     initialLocation: '/login',
+    refreshListenable: refresh,
     redirect: (context, state) {
+      final authState = ref.read(authStateProvider);
       final isLoggedIn = authState.value != null;
       final isOnLogin = state.matchedLocation == '/login';
 
@@ -120,11 +144,11 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
     ],
     errorBuilder: (context, state) => Scaffold(
-      backgroundColor: const Color(0xFF0D1117),
+      backgroundColor: AppTheme.scaffoldBg,
       body: Center(
         child: Text(
           'Page not found',
-          style: TextStyle(color: Colors.white.withValues(alpha: 0.5)),
+          style: TextStyle(color: AppTheme.foregroundSecondary),
         ),
       ),
     ),

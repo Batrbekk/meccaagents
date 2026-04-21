@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:agentteam/core/theme/app_theme.dart';
 import 'package:agentteam/features/auth/presentation/auth_provider.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
@@ -17,13 +18,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
   bool _obscurePassword = true;
 
-  // Light-theme login palette
-  static const Color _surfacePrimary = Color(0xFFFFFFFF);
-  static const Color _accentPrimary = Color(0xFF2196F3);
-  static const Color _textPrimary = Color(0xFF111827);
-  static const Color _textSecondary = Color(0xFF6B7280);
-  static const Color _inputBorder = Color(0xFFD1D5DB);
-  static const Color _placeholder = Color(0xFF9CA3AF);
+  // Design-token aliases (kept for readability in this file).
+  static const Color _surfacePrimary = AppTheme.surfacePrimary;
+  static const Color _accentPrimary = AppTheme.accentPrimary;
+  static const Color _textPrimary = AppTheme.foregroundPrimary;
+  static const Color _textSecondary = AppTheme.foregroundSecondary;
+  static const Color _inputBorder = AppTheme.borderInput;
+  static const Color _placeholder = AppTheme.foregroundTertiary;
 
   @override
   void dispose() {
@@ -51,15 +52,15 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           SnackBar(
             content: Text(
               next.error.toString(),
-              style: const TextStyle(color: Colors.white),
+              style: const TextStyle(color: AppTheme.foregroundInverse),
             ),
-            backgroundColor: Colors.red.shade700,
+            backgroundColor: AppTheme.error,
             behavior: SnackBarBehavior.floating,
           ),
         );
       }
       if (next.hasValue && next.value != null) {
-        context.go('/threads');
+        context.go('/chat');
       }
     });
 
@@ -233,7 +234,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           onPressed: isLoading ? null : _handleLogin,
                           style: ElevatedButton.styleFrom(
                             backgroundColor: _accentPrimary,
-                            foregroundColor: Colors.white,
+                            foregroundColor: AppTheme.foregroundInverse,
                             disabledBackgroundColor:
                                 _accentPrimary.withValues(alpha: 0.4),
                             elevation: 0,
@@ -247,7 +248,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                   width: 22,
                                   child: CircularProgressIndicator(
                                     strokeWidth: 2,
-                                    color: Colors.white,
+                                    color: AppTheme.foregroundInverse,
                                   ),
                                 )
                               : Text(
@@ -255,7 +256,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                   style: GoogleFonts.inter(
                                     fontSize: 16,
                                     fontWeight: FontWeight.w600,
-                                    color: Colors.white,
+                                    color: AppTheme.foregroundInverse,
                                   ),
                                 ),
                         ),
@@ -312,13 +313,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       ),
       errorBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(8),
-        borderSide: BorderSide(color: Colors.red.shade400, width: 1),
+        borderSide: const BorderSide(color: AppTheme.error, width: 1),
       ),
       focusedErrorBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(8),
-        borderSide: BorderSide(color: Colors.red.shade400, width: 1.5),
+        borderSide: const BorderSide(color: AppTheme.error, width: 1.5),
       ),
-      errorStyle: TextStyle(color: Colors.red.shade600, fontSize: 12),
+      errorStyle: const TextStyle(color: AppTheme.error, fontSize: 12),
     );
   }
 }

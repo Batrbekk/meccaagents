@@ -89,7 +89,7 @@ class _MainChatScreenState extends ConsumerState<MainChatScreen> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text('Failed to upload ${file.name}: $e'),
-                backgroundColor: Colors.red.shade700),
+                backgroundColor: AppTheme.error),
           );
         }
       }
@@ -152,17 +152,17 @@ class _MainChatScreenState extends ConsumerState<MainChatScreen> {
             right: 16,
             child: Container(
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: AppTheme.surfacePrimary,
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: const Color(0xFFE5E7EB)),
+                border: Border.all(color: AppTheme.borderDefault),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.12),
+                    color: AppTheme.foregroundPrimary.withValues(alpha: 0.12),
                     blurRadius: 16,
                     offset: const Offset(0, -4),
                   ),
                   BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.06),
+                    color: AppTheme.foregroundPrimary.withValues(alpha: 0.06),
                     blurRadius: 4,
                     offset: const Offset(0, -1),
                   ),
@@ -182,7 +182,7 @@ class _MainChatScreenState extends ConsumerState<MainChatScreen> {
                       child: Text(
                         agent.name[0].toUpperCase(),
                         style: const TextStyle(
-                          color: Colors.white,
+                          color: AppTheme.foregroundInverse,
                           fontSize: 13,
                           fontWeight: FontWeight.bold,
                         ),
@@ -260,7 +260,7 @@ class _MainChatScreenState extends ConsumerState<MainChatScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Failed to send: $e'),
-            backgroundColor: Colors.red.shade700,
+            backgroundColor: AppTheme.error,
           ),
         );
       }
@@ -497,7 +497,7 @@ class _ChatBody extends ConsumerWidget {
                                   if (context.mounted) {
                                     ScaffoldMessenger.of(context).showSnackBar(
                                       SnackBar(content: Text('Failed to delete: $e'),
-                                          backgroundColor: Colors.red.shade700),
+                                          backgroundColor: AppTheme.error),
                                     );
                                   }
                                 }
@@ -517,7 +517,7 @@ class _ChatBody extends ConsumerWidget {
           padding: EdgeInsets.symmetric(horizontal: hPad, vertical: 8),
           decoration: const BoxDecoration(
             border: Border(
-              top: BorderSide(color: Color(0xFFE5E7EB), width: 1),
+              top: BorderSide(color: AppTheme.borderDefault, width: 1),
             ),
           ),
           child: SafeArea(
@@ -607,11 +607,11 @@ class _ChatBody extends ConsumerWidget {
                         decoration: InputDecoration(
                           hintText: 'Message agents...',
                           hintStyle: GoogleFonts.inter(
-                            color: const Color(0xFF9CA3AF),
+                            color: AppTheme.foregroundTertiary,
                             fontSize: 14,
                           ),
                           filled: true,
-                          fillColor: const Color(0xFFF3F4F6),
+                          fillColor: AppTheme.borderLight,
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(20),
                             borderSide: BorderSide.none,
@@ -656,12 +656,12 @@ class _ChatBody extends ConsumerWidget {
                                   height: 18,
                                   child: CircularProgressIndicator(
                                     strokeWidth: 2,
-                                    color: Colors.white,
+                                    color: AppTheme.foregroundInverse,
                                   ),
                                 )
                               : const Icon(
                                   Icons.arrow_upward,
-                                  color: Colors.white,
+                                  color: AppTheme.foregroundInverse,
                                   size: 18,
                                 ),
                         ),
@@ -689,11 +689,13 @@ class _ChatBody extends ConsumerWidget {
   }
 
   static Color _fileColor(String mimeType) {
-    if (mimeType.startsWith('image/')) return Colors.green;
-    if (mimeType.startsWith('video/')) return Colors.purple;
-    if (mimeType.contains('pdf')) return Colors.red;
-    if (mimeType.contains('spreadsheet') || mimeType.contains('excel')) return Colors.green.shade700;
-    return Colors.blue;
+    if (mimeType.startsWith('image/')) return AppTheme.success;
+    if (mimeType.startsWith('video/')) return AgentColors.orchestrator;
+    if (mimeType.contains('pdf')) return AppTheme.error;
+    if (mimeType.contains('spreadsheet') || mimeType.contains('excel')) {
+      return AppTheme.success;
+    }
+    return AgentColors.lawyer;
   }
 }
 

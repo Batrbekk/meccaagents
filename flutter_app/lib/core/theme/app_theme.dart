@@ -20,8 +20,8 @@ class AppTheme {
   static const Color foregroundInverse = Color(0xFFFFFFFF);
 
   // Accent / Brand
-  static const Color accentPrimary = Color(0xFF7B61FF);
-  static const Color accentPrimaryLight = Color(0xFFEDE9FE); // tinted bg
+  static const Color accentPrimary = Color(0xFFFF000B);
+  static const Color accentPrimaryLight = Color(0xFFFFE5E6); // tinted bg
 
   // Borders
   static const Color borderDefault = Color(0xFFE5E7EB);

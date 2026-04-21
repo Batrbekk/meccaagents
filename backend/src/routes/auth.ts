@@ -27,7 +27,7 @@ type LoginBodyType = Static<typeof LoginBody>;
 
 // --- Constants ---
 
-const REFRESH_TOKEN_EXPIRY_DAYS = 30;
+const REFRESH_TOKEN_EXPIRY_DAYS = 180;
 const COOKIE_NAME = 'refresh_token';
 
 function refreshCookieOptions(expires: Date) {
