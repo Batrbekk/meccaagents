@@ -35,31 +35,6 @@ export function verifyMetaSignature(
   );
 }
 
-// ── 360dialog (WhatsApp) ──────────────────────────────────────────────
-
-/**
- * Verify the `X-Signature` header sent by 360dialog webhooks.
- *
- * 360dialog computes HMAC-SHA256 of the raw request body using the API
- * key and sends the hex digest.
- */
-export function verify360DialogSignature(
-  payload: string,
-  signature: string,
-  apiKey: string,
-): boolean {
-  const expected = createHmac('sha256', apiKey)
-    .update(payload, 'utf8')
-    .digest('hex');
-
-  if (expected.length !== signature.length) return false;
-
-  return timingSafeEqual(
-    Buffer.from(expected, 'hex'),
-    Buffer.from(signature, 'hex'),
-  );
-}
-
 // ── Replay protection ─────────────────────────────────────────────────
 
 /**

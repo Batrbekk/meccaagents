@@ -3,56 +3,68 @@ import { logger } from '../lib/logger.js';
 // ── Types ─────────────────────────────────────────────────────────────
 
 export interface ParsedWhatsAppMessage {
-  from: string; // phone number (e.g. "77001234567")
-  name?: string; // contact display name
+  from: string; // phone number without @c.us (e.g. "77001234567")
+  name?: string;
   messageId: string;
   type: 'text' | 'image' | 'document' | 'audio' | 'video';
   text?: string;
   mediaUrl?: string;
   timestamp: Date;
+  idInstance: string; // Green API instance that received the message
 }
 
-interface SendResponse {
-  messages: Array<{ id: string }>;
-}
+// ── Green API WhatsApp client ─────────────────────────────────────────
+//
+// Docs: https://green-api.com/en/docs/
+// Send text:   POST https://api.green-api.com/waInstance{idInstance}/sendMessage/{apiTokenInstance}
+// Send file:   POST https://api.green-api.com/waInstance{idInstance}/sendFileByUrl/{apiTokenInstance}
+// Status:      GET  https://api.green-api.com/waInstance{idInstance}/getStateInstance/{apiTokenInstance}
 
-// ── 360dialog WhatsApp client ─────────────────────────────────────────
-
-const BASE_URL = 'https://waba.360dialog.io/v1';
+const BASE_URL = 'https://api.green-api.com';
 
 export class WhatsAppClient {
-  constructor(private apiKey: string) {}
+  constructor(
+    private idInstance: string,
+    private apiTokenInstance: string,
+  ) {}
 
-  // ── Send a plain text message ─────────────────────────────────────
+  // Convert "77001234567" → "77001234567@c.us" (Green API chat format).
+  private static toChatId(to: string): string {
+    const clean = to.replace(/\D/g, '');
+    return clean.includes('@') ? to : `${clean}@c.us`;
+  }
+
+  private urlFor(method: string): string {
+    return `${BASE_URL}/waInstance${this.idInstance}/${method}/${this.apiTokenInstance}`;
+  }
 
   async sendMessage(
     to: string,
     text: string,
   ): Promise<{ messageId: string }> {
     const body = {
-      messaging_product: 'whatsapp',
-      to,
-      type: 'text',
-      text: { body: text },
+      chatId: WhatsAppClient.toChatId(to),
+      message: text,
     };
 
-    const res = await fetch(`${BASE_URL}/messages`, {
+    const res = await fetch(this.urlFor('sendMessage'), {
       method: 'POST',
-      headers: this.headers(),
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
 
     if (!res.ok) {
       const detail = await res.text();
       logger.error({ status: res.status, detail }, 'WhatsApp sendMessage failed');
-      throw new Error(`WhatsApp API error ${res.status}: ${detail}`);
+      throw new Error(`Green API error ${res.status}: ${detail}`);
     }
 
-    const data = (await res.json()) as SendResponse;
-    return { messageId: data.messages[0]!.id };
+    const data = (await res.json()) as { idMessage?: string };
+    if (!data.idMessage) {
+      throw new Error('Green API did not return idMessage');
+    }
+    return { messageId: data.idMessage };
   }
-
-  // ── Send a media message (image / document) ───────────────────────
 
   async sendMedia(
     to: string,
@@ -60,99 +72,113 @@ export class WhatsAppClient {
     type: 'image' | 'document',
     caption?: string,
   ): Promise<{ messageId: string }> {
-    const mediaPayload: Record<string, string> = { link: mediaUrl };
-    if (caption) mediaPayload.caption = caption;
+    const fileName = mediaUrl.split('/').pop() ?? (type === 'image' ? 'image.jpg' : 'document.pdf');
 
-    const body = {
-      messaging_product: 'whatsapp',
-      to,
-      type,
-      [type]: mediaPayload,
+    const body: Record<string, string> = {
+      chatId: WhatsAppClient.toChatId(to),
+      urlFile: mediaUrl,
+      fileName,
     };
+    if (caption) body.caption = caption;
 
-    const res = await fetch(`${BASE_URL}/messages`, {
+    const res = await fetch(this.urlFor('sendFileByUrl'), {
       method: 'POST',
-      headers: this.headers(),
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
 
     if (!res.ok) {
       const detail = await res.text();
       logger.error({ status: res.status, detail }, 'WhatsApp sendMedia failed');
-      throw new Error(`WhatsApp API error ${res.status}: ${detail}`);
+      throw new Error(`Green API error ${res.status}: ${detail}`);
     }
 
-    const data = (await res.json()) as SendResponse;
-    return { messageId: data.messages[0]!.id };
+    const data = (await res.json()) as { idMessage?: string };
+    if (!data.idMessage) throw new Error('Green API did not return idMessage');
+    return { messageId: data.idMessage };
   }
 
-  // ── Parse an incoming 360dialog webhook payload ───────────────────
-
+  // ── Parse an incoming Green API webhook payload ───────────────────
+  //
+  // Reference payload (typeWebhook: incomingMessageReceived):
+  // {
+  //   typeWebhook: "incomingMessageReceived",
+  //   instanceData: { idInstance: 123, wid: "...@c.us" },
+  //   timestamp: 1712345678,
+  //   idMessage: "ABCDEF",
+  //   senderData: { chatId: "7700...@c.us", sender: "...@c.us", senderName: "Name" },
+  //   messageData: {
+  //     typeMessage: "textMessage" | "extendedTextMessage" | "imageMessage" | ...,
+  //     textMessageData?: { textMessage: "..." },
+  //     extendedTextMessageData?: { text: "..." },
+  //     fileMessageData?: { downloadUrl, caption, fileName, mimeType }
+  //   }
+  // }
   static parseIncoming(body: unknown): ParsedWhatsAppMessage | null {
     try {
       const root = body as Record<string, unknown>;
+      if (root.typeWebhook !== 'incomingMessageReceived') return null;
 
-      // Cloud API / 360dialog wraps in `entry[].changes[].value`
-      const entries = (root.entry ?? []) as Array<Record<string, unknown>>;
-      if (entries.length === 0) return null;
+      const instanceData = root.instanceData as Record<string, unknown> | undefined;
+      const idInstance = instanceData?.idInstance != null
+        ? String(instanceData.idInstance)
+        : '';
 
-      const changes = (entries[0]!.changes ?? []) as Array<Record<string, unknown>>;
-      if (changes.length === 0) return null;
+      const senderData = root.senderData as Record<string, unknown> | undefined;
+      const chatId = senderData?.chatId as string | undefined;
+      const senderName = senderData?.senderName as string | undefined;
+      if (!chatId) return null;
 
-      const value = changes[0]!.value as Record<string, unknown> | undefined;
-      if (!value) return null;
+      // chatId = "77001234567@c.us" → take the digits before "@"
+      const from = chatId.split('@')[0] ?? '';
 
-      const msgsArr = (value.messages ?? []) as Array<Record<string, unknown>>;
-      if (msgsArr.length === 0) return null;
+      const messageData = root.messageData as Record<string, unknown> | undefined;
+      const typeMessage = messageData?.typeMessage as string | undefined;
+      if (!messageData || !typeMessage) return null;
 
-      const msg = msgsArr[0]!;
-
-      // Extract contact name
-      const contacts = (value.contacts ?? []) as Array<Record<string, unknown>>;
-      const profile = contacts[0]?.profile as Record<string, unknown> | undefined;
-      const name = profile?.name as string | undefined;
-
-      const msgType = msg.type as string;
-
+      let parsedType: ParsedWhatsAppMessage['type'] = 'text';
       let text: string | undefined;
       let mediaUrl: string | undefined;
 
-      if (msgType === 'text') {
-        const textObj = msg.text as Record<string, unknown> | undefined;
-        text = textObj?.body as string | undefined;
-      } else if (['image', 'document', 'audio', 'video'].includes(msgType)) {
-        const mediaObj = msg[msgType] as Record<string, unknown> | undefined;
-        mediaUrl = mediaObj?.url as string | undefined;
-        // Some media messages also carry a caption
-        text = mediaObj?.caption as string | undefined;
+      if (typeMessage === 'textMessage') {
+        const d = messageData.textMessageData as Record<string, unknown> | undefined;
+        text = d?.textMessage as string | undefined;
+      } else if (typeMessage === 'extendedTextMessage') {
+        const d = messageData.extendedTextMessageData as Record<string, unknown> | undefined;
+        text = d?.text as string | undefined;
+      } else if (
+        typeMessage === 'imageMessage' ||
+        typeMessage === 'videoMessage' ||
+        typeMessage === 'documentMessage' ||
+        typeMessage === 'audioMessage'
+      ) {
+        const d = messageData.fileMessageData as Record<string, unknown> | undefined;
+        mediaUrl = d?.downloadUrl as string | undefined;
+        text = d?.caption as string | undefined;
+        if (typeMessage === 'imageMessage') parsedType = 'image';
+        else if (typeMessage === 'videoMessage') parsedType = 'video';
+        else if (typeMessage === 'documentMessage') parsedType = 'document';
+        else if (typeMessage === 'audioMessage') parsedType = 'audio';
+      } else {
+        return null;
       }
 
-      const validTypes = ['text', 'image', 'document', 'audio', 'video'] as const;
-      const parsedType = validTypes.includes(msgType as typeof validTypes[number])
-        ? (msgType as ParsedWhatsAppMessage['type'])
-        : 'text';
+      const idMessage = root.idMessage as string | undefined;
+      const timestampSec = root.timestamp as number | undefined;
 
       return {
-        from: msg.from as string,
-        name,
-        messageId: msg.id as string,
+        from,
+        name: senderName,
+        messageId: idMessage ?? `${idInstance}-${timestampSec ?? Date.now()}`,
         type: parsedType,
         text,
         mediaUrl,
-        timestamp: new Date(Number(msg.timestamp as string) * 1000),
+        timestamp: new Date((timestampSec ?? Math.floor(Date.now() / 1000)) * 1000),
+        idInstance,
       };
     } catch (err) {
       logger.warn({ err }, 'Failed to parse incoming WhatsApp message');
       return null;
     }
-  }
-
-  // ── Private helpers ───────────────────────────────────────────────
-
-  private headers(): Record<string, string> {
-    return {
-      'D360-API-KEY': this.apiKey,
-      'Content-Type': 'application/json',
-    };
   }
 }

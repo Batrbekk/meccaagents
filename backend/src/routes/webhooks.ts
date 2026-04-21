@@ -5,7 +5,6 @@ import { decrypt } from '../lib/crypto.js';
 import { publish } from '../lib/pubsub.js';
 import {
   verifyMetaSignature,
-  verify360DialogSignature,
   checkReplayProtection,
 } from '../lib/webhook-verify.js';
 import { WhatsAppClient } from '../tools/whatsapp.js';
@@ -24,7 +23,8 @@ declare module 'fastify' {
 interface WhatsAppAccount {
   id: string;
   label: string | null;
-  apiKey: string;
+  idInstance: string;
+  apiTokenInstance: string;
 }
 
 interface InstagramCredentials {
@@ -52,25 +52,21 @@ async function getAllWhatsAppAccounts(
 
     for (const row of rows) {
       try {
-        const parsed = JSON.parse(decrypt(row.credentials)) as { apiKey?: string };
-        if (parsed.apiKey) {
+        const parsed = JSON.parse(decrypt(row.credentials)) as {
+          idInstance?: string;
+          apiTokenInstance?: string;
+        };
+        if (parsed.idInstance && parsed.apiTokenInstance) {
           accounts.push({
             id: row.id,
             label: row.label,
-            apiKey: parsed.apiKey,
+            idInstance: String(parsed.idInstance),
+            apiTokenInstance: String(parsed.apiTokenInstance),
           });
         }
       } catch { /* skip invalid */ }
     }
   } catch { /* DB error */ }
-
-  // Fallback to env
-  if (accounts.length === 0) {
-    const envKey = process.env.WHATSAPP_API_KEY;
-    if (envKey) {
-      accounts.push({ id: 'env', label: 'Default', apiKey: envKey });
-    }
-  }
 
   return accounts;
 }
@@ -145,34 +141,31 @@ export default async function webhookRoutes(fastify: FastifyInstance) {
 
   // ================================================================
   // POST /webhooks/whatsapp
-  // Try all WhatsApp accounts to find the matching one by signature
+  // Green API sends JSON payloads that include `instanceData.idInstance`.
+  // We identify the account by matching idInstance against our DB.
   // ================================================================
   fastify.post(
     '/whatsapp',
     async (request: FastifyRequest, reply: FastifyReply) => {
-      const accounts = await getAllWhatsAppAccounts(fastify);
-
-      const signature = (request.headers['x-signature'] as string) ?? '';
-      const rawBody = request.rawBody ?? JSON.stringify(request.body);
-
-      // Find the account whose API key matches the signature
-      let matchedAccount: WhatsAppAccount | null = null;
-      for (const account of accounts) {
-        if (verify360DialogSignature(rawBody, signature, account.apiKey)) {
-          matchedAccount = account;
-          break;
-        }
-      }
-
-      if (!matchedAccount) {
-        logger.warn('WhatsApp webhook: no matching account for signature');
-        return reply.status(401).send({ error: 'Invalid signature' });
-      }
-
       // ── Parse incoming message ────────────────────────────────────
       const parsed = WhatsAppClient.parseIncoming(request.body);
       if (!parsed) {
+        // Could be a non-message webhook (status update, outgoing ACK, etc.)
         return reply.status(200).send({ status: 'ignored' });
+      }
+
+      // ── Match account by idInstance ───────────────────────────────
+      const accounts = await getAllWhatsAppAccounts(fastify);
+      const matchedAccount = accounts.find(
+        (a) => a.idInstance === parsed.idInstance,
+      );
+
+      if (!matchedAccount) {
+        logger.warn(
+          { idInstance: parsed.idInstance },
+          'WhatsApp webhook: no account matching idInstance',
+        );
+        return reply.status(200).send({ status: 'unknown_instance' });
       }
 
       // ── Replay protection ─────────────────────────────────────────

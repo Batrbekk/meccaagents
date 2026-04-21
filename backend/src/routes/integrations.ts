@@ -431,10 +431,23 @@ async function testIntegrationRow(
       }
 
       case 'whatsapp': {
-        const res = await fetch('https://waba.360dialog.io/v1/health', {
-          headers: { 'D360-API-KEY': String(creds.apiKey) },
-        });
-        return { success: res.ok, details: { status: res.status } };
+        const idInstance = String(creds.idInstance ?? '');
+        const token = String(creds.apiTokenInstance ?? '');
+        if (!idInstance || !token) {
+          return { success: false, error: 'Missing idInstance or apiTokenInstance' };
+        }
+        const res = await fetch(
+          `https://api.green-api.com/waInstance${idInstance}/getStateInstance/${token}`,
+        );
+        if (!res.ok) {
+          return { success: false, error: `Green API returned ${res.status}` };
+        }
+        const data = (await res.json()) as { stateInstance?: string };
+        // stateInstance: "authorized" | "notAuthorized" | "blocked" | "sleepMode" | "starting"
+        return {
+          success: data.stateInstance === 'authorized',
+          details: { state: data.stateInstance },
+        };
       }
 
       case 'instagram': {

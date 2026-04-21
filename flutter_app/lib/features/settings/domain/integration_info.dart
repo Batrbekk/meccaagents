@@ -101,7 +101,7 @@ class IntegrationInfo {
   /// Default credential fields for known services.
   static List<String> _defaultFields(String service) => switch (service) {
         'openrouter' => ['apiKey'],
-        'whatsapp' => ['apiKey'],
+        'whatsapp' => ['idInstance', 'apiTokenInstance'],
         'instagram' => ['accessToken', 'accountId'],
         'tiktok' => ['accessToken'],
         'threads' => ['accessToken'],
